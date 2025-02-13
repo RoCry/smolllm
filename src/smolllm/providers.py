@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 import json
-import os
 from typing import Optional
 
 
@@ -48,11 +47,8 @@ PROVIDERS = generate_provider_map()
 # try parse provider and model name from model_str, e.g.
 # "gemini/gemini-2.0-flash" -> ("gemini", "gemini-2.0-flash")
 # "gemini" -> ("gemini", "gemini-2.0-flash") // /w default model for the provider
-def parse_model_string(model_str: Optional[str] = None) -> tuple[Provider, str]:
+def parse_model_string(model_str: str) -> tuple[Provider, str]:
     """Parse model string into provider and model name"""
-    if not model_str:
-        model_str = os.getenv("SMOLLLM_MODEL")
-
     if "/" in model_str:
         provider_name, model_name = model_str.split("/", 1)
     else:

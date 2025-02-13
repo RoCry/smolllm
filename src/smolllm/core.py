@@ -1,7 +1,6 @@
 import os
 import json
 from typing import Optional
-from dotenv import load_dotenv
 import httpx
 
 from .types import StreamHandler
@@ -35,8 +34,12 @@ async def ask_llm(
         stream_handler: Optional callback for handling streaming responses
         timeout: Request timeout in seconds
     """
-    load_dotenv()
-
+    if not model:
+        model = os.getenv("SMOLLLM_MODEL")
+    if not model:
+        raise ValueError(
+            "Model string not found. Set SMOLLLM_MODEL environment variable or pass model parameter"
+        )
     provider, model_name = parse_model_string(model)
 
     if not base_url:
