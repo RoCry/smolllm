@@ -43,8 +43,12 @@ async def ask_llm(
     provider, model_name = parse_model_string(model)
 
     if not base_url:
-        env_base_url = os.getenv(f"{provider.name.upper()}_BASE_URL")
-        base_url = env_base_url or provider.base_url
+        env_key = f"{provider.name.upper()}_BASE_URL"
+        base_url = os.getenv(env_key) or provider.base_url
+        if not base_url:
+            raise ValueError(
+                f"Base URL not found. Set {env_key} environment variable or pass base_url parameter"
+            )
 
     if not api_key:
         env_key = f"{provider.name.upper()}_API_KEY"

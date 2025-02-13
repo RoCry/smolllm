@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-import json
-from typing import Optional
+from typing import Optional, Dict
+from .provider_config import PROVIDER_CONFIG
 
 
 @dataclass
@@ -21,24 +21,12 @@ class Provider:
         return None
 
 
-def generate_provider_map() -> dict[str, Provider]:
-    with open("providers.json", "r") as f:
-        raw_providers = json.load(f)
-
-    provider_map = {}
-    for name, config in raw_providers.items():
-        provider_map[name] = Provider(
-            name=name,
-            base_url=config["api"]["url"],
-        )
-
-    # add more
-    provider_map["tencent_cloud"] = Provider(
-        name="tencent_cloud",
-        base_url="https://api.lkeap.cloud.tencent.com",
-    )
-
-    return provider_map
+def generate_provider_map() -> Dict[str, Provider]:
+    """Generate provider mapping from static configuration"""
+    return {
+        name: Provider(name=name, base_url=config["base_url"])
+        for name, config in PROVIDER_CONFIG.items()
+    }
 
 
 PROVIDERS = generate_provider_map()
