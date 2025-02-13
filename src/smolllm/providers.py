@@ -53,14 +53,11 @@ def parse_model_string(model_str: Optional[str] = None) -> tuple[Provider, str]:
     if not model_str:
         model_str = os.getenv("SMOLLLM_MODEL")
 
-    print(model_str)
     if "/" in model_str:
         provider_name, model_name = model_str.split("/", 1)
     else:
         # Use the model string as provider name and get its default model
         provider_name = model_str
-
-    print(provider_name, model_name)
 
     provider = PROVIDERS.get(provider_name)
     if not provider:
