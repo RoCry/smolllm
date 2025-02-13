@@ -1,11 +1,24 @@
 from dataclasses import dataclass
 import json
+from typing import Optional
 
 
 @dataclass
 class Provider:
     name: str
     base_url: str
+    default_model_name: Optional[str] = None
+
+    # Guess default model name if not provided
+    # this is designed for random choosing from multiple providers
+    def guess_default_model_name(self) -> Optional[str]:
+        if self.default_model_name:
+            return self.default_model_name
+
+        if self.name == "gemini":
+            return "gemini-2.0-flash"
+
+        return None
 
 
 def generate_provider_map() -> dict[str, Provider]:

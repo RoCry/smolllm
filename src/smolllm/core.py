@@ -38,7 +38,7 @@ async def ask_llm(
     load_dotenv()
 
     provider, model_name = parse_model_string(model)
-    
+
     if not api_key:
         env_key = f"{provider.name.upper()}_API_KEY"
         api_key = os.getenv(env_key)
@@ -69,9 +69,7 @@ async def ask_llm(
             "POST", url, headers=headers, json=data, timeout=timeout
         ) as response:
             response.raise_for_status()
-            return await process_stream_response(
-                response, handler, provider.name
-            )
+            return await process_stream_response(response, handler, provider.name)
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP error: {e}")
         raise
