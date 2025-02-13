@@ -6,6 +6,7 @@ A minimal Python library for interacting with various LLM providers, featuring a
 
 ```bash
 pip install smolllm
+uv add "smolllm @ ../smolllm"
 ```
 
 ## Quick Start
