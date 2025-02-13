@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import json
+import os
 from typing import Optional
 
 
@@ -44,10 +45,17 @@ def generate_provider_map() -> dict[str, Provider]:
 PROVIDERS = generate_provider_map()
 
 
-def parse_model_string(model_str: str) -> tuple[Provider, str]:
+def parse_model_string(model_str: Optional[str] = None) -> tuple[Provider, str]:
     """Parse model string into provider and model name"""
+    if not model_str:
+        model_str = os.getenv("SMOLLLM_MODEL")
+
+    model_name = None
     if "/" in model_str:
         provider_name, model_name = model_str.split("/", 1)
+        if provider_name not in PROVIDERS:
+            # special case: huihui_ai/deepseek-r1-abliterated:14b
+            model_name = model_str
     else:
         # Use the model string as provider name and get its default model
         provider_name = model_str
@@ -55,5 +63,8 @@ def parse_model_string(model_str: str) -> tuple[Provider, str]:
     provider = PROVIDERS.get(provider_name)
     if not provider:
         raise ValueError(f"Unknown provider: {provider_name}")
+    model_name = model_name or provider.guess_default_model_name()
+    if not model_name:
+        raise ValueError(f"Model name not found for provider: {provider_name}")
 
     return provider, model_name

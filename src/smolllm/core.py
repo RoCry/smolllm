@@ -17,7 +17,7 @@ async def ask_llm(
     prompt: str,
     *,
     system_prompt: Optional[str] = None,
-    model: str,
+    model: Optional[str] = None,
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
     handler: Optional[StreamHandler] = None,
