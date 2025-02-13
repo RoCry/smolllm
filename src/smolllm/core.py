@@ -39,18 +39,21 @@ async def ask_llm(
 
     provider, model_name = parse_model_string(model)
 
+    if not base_url:
+        env_base_url = os.getenv(f"{provider.name.upper()}_BASE_URL")
+        base_url = env_base_url or provider.base_url
+
     if not api_key:
         env_key = f"{provider.name.upper()}_API_KEY"
         api_key = os.getenv(env_key)
         if not api_key:
-            raise ValueError(
-                f"API key not found. Set {env_key} environment variable or pass api_key parameter"
-            )
-
-    if not base_url:
-        env_url_key = f"{provider.name.upper()}_BASE_URL"
-        env_base_url = os.getenv(env_url_key)
-        base_url = env_base_url or provider.base_url
+            # special case for convenience: ollama
+            if provider.name == "ollama":
+                api_key = "ollama"
+            else:
+                raise ValueError(
+                    f"API key not found. Set {env_key} environment variable or pass api_key parameter"
+                )
 
     if not base_url:
         raise ValueError("Base URL is required")
@@ -62,7 +65,7 @@ async def ask_llm(
     client = prepare_client_and_auth(url, provider.name, api_key, headers)
 
     api_key_preview = api_key[:5] + "..." + api_key[-4:]
-    logger.info(f"Sending {url}, model={model_name} api_key={api_key_preview}")
+    logger.info(f"Sending {url} model={model_name} api_key={api_key_preview}")
 
     try:
         async with client.stream(
