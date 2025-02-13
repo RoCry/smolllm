@@ -1,9 +1,10 @@
 from rich.live import Live
 from rich.text import Text
 from rich.markdown import Markdown
-from rich.console import Group
+from rich.console import Group, Console
 from rich.rule import Rule
 from typing import Optional
+import sys
 from .types import StreamHandler
 
 
@@ -12,13 +13,17 @@ class ResponseDisplay:
         self.stream_handler = stream_handler
         self.final_response = ""
         self.live: Optional[Live] = None
+        # Check if we're in an interactive terminal
+        self.is_interactive = sys.stdout.isatty() and sys.stderr.isatty()
 
     def __enter__(self):
-        self.live = Live(
-            Group(Rule(style="grey50"), Text(""), Rule(style="grey50")),
-            refresh_per_second=4,
-            vertical_overflow="visible",
-        ).__enter__()
+        if self.is_interactive:
+            self.live = Live(
+                Group(Rule(style="grey50"), Text(""), Rule(style="grey50")),
+                refresh_per_second=4,
+                vertical_overflow="visible",
+                console=Console(stderr=True),  # Send rich output to stderr
+            ).__enter__()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -31,11 +36,13 @@ class ResponseDisplay:
             self.stream_handler(delta)
 
         self.final_response += delta
-        self._update_display(with_cursor=True)
+        if self.is_interactive:
+            self._update_display(with_cursor=True)
 
     def finalize(self):
         """Show final response without cursor"""
-        self._update_display(with_cursor=False)
+        if self.is_interactive:
+            self._update_display(with_cursor=False)
         return self.final_response.strip()
 
     def _update_display(self, with_cursor: bool = True):
