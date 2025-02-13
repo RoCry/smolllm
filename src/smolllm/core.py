@@ -42,7 +42,7 @@ async def ask_llm(
     if not api_key:
         env_key = f"{provider.name.upper()}_API_KEY"
         api_key = os.getenv(env_key)
-        if not api_key and not base_url.startswith("http://"):
+        if not api_key:
             raise ValueError(
                 f"API key not found. Set {env_key} environment variable or pass api_key parameter"
             )
@@ -61,7 +61,7 @@ async def ask_llm(
     )
     client = prepare_client_and_auth(url, provider.name, api_key, headers)
 
-    api_key_preview = api_key[:5] + "..." + api_key[-4:] if api_key else "None"
+    api_key_preview = api_key[:5] + "..." + api_key[-4:]
     logger.info(f"Sending {url}, model={model_name} api_key={api_key_preview}")
 
     try:

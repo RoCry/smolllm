@@ -6,7 +6,6 @@ from functools import partial
 custom_ollama = partial(
     ask_llm,
     model="ollama/deepseek-r1:7b",
-    base_url="http://rocry-win.local:11434/v1",
 )
 
 
@@ -15,7 +14,7 @@ def translate(llm: LLMFunction, text: str, to: str = "Chinese"):
 
 
 async def main():
-    print(await translate(custom_ollama, "Hello"))
+    print(await translate(custom_ollama, "Say hello world in a creative way"))
 
 
 if __name__ == "__main__":
