@@ -20,7 +20,7 @@ console = Console(
 rich_handler = RichHandler(
     rich_tracebacks=True,
     console=console,  # Use stderr console
-    # show_time=False,  # Optional: removes timestamp for cleaner output
+    show_time=False,  # removes timestamp for cleaner output
 )
 rich_handler.setFormatter(logging.Formatter("%(message)s"))
 
