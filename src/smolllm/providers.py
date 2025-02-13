@@ -45,20 +45,22 @@ def generate_provider_map() -> dict[str, Provider]:
 PROVIDERS = generate_provider_map()
 
 
+# try parse provider and model name from model_str, e.g.
+# "gemini/gemini-2.0-flash" -> ("gemini", "gemini-2.0-flash")
+# "gemini" -> ("gemini", "gemini-2.0-flash") // /w default model for the provider
 def parse_model_string(model_str: Optional[str] = None) -> tuple[Provider, str]:
     """Parse model string into provider and model name"""
     if not model_str:
         model_str = os.getenv("SMOLLLM_MODEL")
 
-    model_name = None
+    print(model_str)
     if "/" in model_str:
         provider_name, model_name = model_str.split("/", 1)
-        if provider_name not in PROVIDERS:
-            # special case: huihui_ai/deepseek-r1-abliterated:14b
-            model_name = model_str
     else:
         # Use the model string as provider name and get its default model
         provider_name = model_str
+
+    print(provider_name, model_name)
 
     provider = PROVIDERS.get(provider_name)
     if not provider:
