@@ -68,11 +68,14 @@ async def ask_llm(
         async with client.stream(
             "POST", url, headers=headers, json=data, timeout=timeout
         ) as response:
-            response.raise_for_status()
+            if response.status_code >= 400:
+                error_text = await response.aread()
+                raise httpx.HTTPStatusError(
+                    f"HTTP Error {response.status_code}: {error_text.decode()}",
+                    request=response.request,
+                    response=response,
+                )
             return await process_stream_response(response, handler, provider.name)
-    except httpx.HTTPStatusError as e:
-        logger.error(f"HTTP error: {e}")
-        raise
     except Exception as e:
         logger.error(f"Error: {e}")
         raise
