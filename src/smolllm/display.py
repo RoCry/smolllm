@@ -20,7 +20,7 @@ class ResponseDisplay:
         if self.is_interactive:
             self.live = Live(
                 Group(Rule(style="grey50"), Text(""), Rule(style="grey50")),
-                refresh_per_second=4,
+                refresh_per_second=1,
                 vertical_overflow="visible",
                 console=Console(stderr=True),  # Send rich output to stderr
             ).__enter__()
