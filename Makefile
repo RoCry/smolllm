@@ -11,7 +11,7 @@ clean:
 	rm -rf dist/ build/ *.egg-info/
 
 install-dev: clean
-	uv pip install -e ".[dev]"
+	uv pip sync --all-extras --dev
 
 build: install-dev
 	python -m build
