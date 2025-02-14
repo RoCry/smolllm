@@ -16,6 +16,8 @@ test-release: build
 	@echo "Test installation completed. Please verify the package works correctly."
 
 release: build
+	@echo "Current version: $(VERSION)"
+	@read -p "Are you sure you want to release this version? [y/N] " confirm && [ $$confirm = "y" ]
 	@echo "Uploading version $(VERSION) to PyPI..."
 	twine upload dist/*
 	@echo "Release completed! Version $(VERSION) is now available on PyPI."
@@ -25,4 +27,14 @@ update-providers:
 	python tools/update_providers.py
 
 install-dev: clean
-	pip install -e . 
+	pip install -e .
+
+# Version management
+bump-patch:
+	python tools/bump_version.py patch
+
+bump-minor:
+	python tools/bump_version.py minor
+
+bump-major:
+	python tools/bump_version.py major 
