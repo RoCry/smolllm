@@ -12,20 +12,30 @@ from pathlib import Path
 def read_version(file_path: Path) -> str:
     """Read version from a Python file"""
     content = file_path.read_text()
-    match = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', content)
+    if file_path.suffix == '.py':
+        match = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', content)
+    elif file_path.suffix == '.toml':
+        match = re.search(r'version\s*=\s*["\']([^"\']+)["\']', content)
     if not match:
         raise ValueError(f"Version not found in {file_path}")
     return match.group(1)
 
 
 def write_version(file_path: Path, new_version: str) -> None:
-    """Write version to a Python file"""
+    """Write version to a file"""
     content = file_path.read_text()
-    new_content = re.sub(
-        r'__version__\s*=\s*["\']([^"\']+)["\']',
-        f'__version__ = "{new_version}"',
-        content
-    )
+    if file_path.suffix == '.py':
+        new_content = re.sub(
+            r'__version__\s*=\s*["\']([^"\']+)["\']',
+            f'__version__ = "{new_version}"',
+            content
+        )
+    elif file_path.suffix == '.toml':
+        new_content = re.sub(
+            r'version\s*=\s*["\']([^"\']+)["\']',
+            f'version = "{new_version}"',
+            content
+        )
     file_path.write_text(new_content)
 
 
@@ -57,7 +67,7 @@ def main():
         root_dir / "pyproject.toml"
     ]
 
-    # Read current version
+    # Read current version from __init__.py
     current_version = read_version(files[0])
     new_version = bump_version(current_version, bump_type)
 
