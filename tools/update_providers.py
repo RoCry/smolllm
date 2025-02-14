@@ -26,16 +26,18 @@ def generate_config_code(providers: Dict[str, Any]) -> str:
         "",
         "PROVIDER_CONFIG = {",
     ]
-    
+
     # Sort providers for consistent output
     for name in sorted(providers.keys()):
         config = providers[name]
-        lines.extend([
-            f'    "{name}": {{',
-            f'        "base_url": "{config["api"]["url"]}",',
-            "    },",
-        ])
-    
+        lines.extend(
+            [
+                f'    "{name}": {{',
+                f'        "base_url": "{config["api"]["url"]}",',
+                "    },",
+            ]
+        )
+
     lines.append("}")
     return "\n".join(lines)
 
@@ -44,13 +46,15 @@ def update_provider_config():
     """Update the provider_config.py file"""
     providers = read_providers_json()
     code = generate_config_code(providers)
-    
-    config_path = Path(__file__).parent.parent / "src" / "smolllm" / "provider_config.py"
+
+    config_path = (
+        Path(__file__).parent.parent / "src" / "smolllm" / "provider_config.py"
+    )
     with open(config_path, "w") as f:
         f.write(code)
-    
+
     print(f"Updated {config_path}")
 
 
 if __name__ == "__main__":
-    update_provider_config() 
+    update_provider_config()

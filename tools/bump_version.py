@@ -12,9 +12,9 @@ from pathlib import Path
 def read_version(file_path: Path) -> str:
     """Read version from a Python file"""
     content = file_path.read_text()
-    if file_path.suffix == '.py':
+    if file_path.suffix == ".py":
         match = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', content)
-    elif file_path.suffix == '.toml':
+    elif file_path.suffix == ".toml":
         match = re.search(r'version\s*=\s*["\']([^"\']+)["\']', content)
     if not match:
         raise ValueError(f"Version not found in {file_path}")
@@ -24,25 +24,23 @@ def read_version(file_path: Path) -> str:
 def write_version(file_path: Path, new_version: str) -> None:
     """Write version to a file"""
     content = file_path.read_text()
-    if file_path.suffix == '.py':
+    if file_path.suffix == ".py":
         new_content = re.sub(
             r'__version__\s*=\s*["\']([^"\']+)["\']',
             f'__version__ = "{new_version}"',
-            content
+            content,
         )
-    elif file_path.suffix == '.toml':
+    elif file_path.suffix == ".toml":
         new_content = re.sub(
-            r'version\s*=\s*["\']([^"\']+)["\']',
-            f'version = "{new_version}"',
-            content
+            r'version\s*=\s*["\']([^"\']+)["\']', f'version = "{new_version}"', content
         )
     file_path.write_text(new_content)
 
 
 def bump_version(version: str, bump_type: str) -> str:
     """Bump version number"""
-    major, minor, patch = map(int, version.split('.'))
-    
+    major, minor, patch = map(int, version.split("."))
+
     if bump_type == "major":
         return f"{major + 1}.0.0"
     elif bump_type == "minor":
@@ -60,12 +58,9 @@ def main():
 
     bump_type = sys.argv[1]
     root_dir = Path(__file__).parent.parent
-    
+
     # Files to update
-    files = [
-        root_dir / "src" / "smolllm" / "__init__.py",
-        root_dir / "pyproject.toml"
-    ]
+    files = [root_dir / "src" / "smolllm" / "__init__.py", root_dir / "pyproject.toml"]
 
     # Read current version from __init__.py
     current_version = read_version(files[0])
@@ -80,4 +75,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()
