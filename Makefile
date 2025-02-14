@@ -1,6 +1,11 @@
-.PHONY: clean build install-dev test-release release bump-patch bump-minor bump-major
+.PHONY: clean build install-dev test-release manual-release bump-patch bump-minor bump-major
 
-VERSION := $(shell python -c "from src.smolllm import __version__; print(__version__)")
+# Helper functions
+define get_version
+$(shell python -c "from src.smolllm import __version__; print(__version__)")
+endef
+
+VERSION := $(call get_version)
 
 clean:
 	rm -rf dist/ build/ *.egg-info/
@@ -29,26 +34,34 @@ manual-release: build
 	@echo "Release completed! Version $(VERSION) is now available on PyPI."
 
 # Version management
+define do_version_bump
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: Could not determine current version"; \
+		exit 1; \
+	fi
+	@echo "Current version: $(VERSION)"
+	@read -p "Are you sure you want to bump $(1) version? [y/N] " confirm && [ $$confirm = "y" ]
+	python tools/bump_version.py $(1)
+	@NEW_VERSION=$$(python -c "from src.smolllm import __version__; print(__version__)") && \
+	if [ -z "$$NEW_VERSION" ]; then \
+		echo "Error: Could not determine new version"; \
+		exit 1; \
+	fi && \
+	echo "Version bumped: $(VERSION) -> $$NEW_VERSION" && \
+	read -p "Do you want to commit, tag and push? [y/N] " confirm && [ $$confirm = "y" ] && \
+	git commit -am "chore: bump version to $$NEW_VERSION" && \
+	git tag v$$NEW_VERSION && \
+	git push && git push --tags
+endef
+
 bump-patch:
-	python tools/bump_version.py patch
-	@echo "Don't forget to:"
-	@echo "1. git commit -am 'chore: bump version to $(VERSION)'"
-	@echo "2. git tag v$(VERSION)"
-	@echo "3. git push && git push --tags"
+	$(call do_version_bump,patch)
 
 bump-minor:
-	python tools/bump_version.py minor
-	@echo "Don't forget to:"
-	@echo "1. git commit -am 'chore: bump version to $(VERSION)'"
-	@echo "2. git tag v$(VERSION)"
-	@echo "3. git push && git push --tags"
+	$(call do_version_bump,minor)
 
 bump-major:
-	python tools/bump_version.py major
-	@echo "Don't forget to:"
-	@echo "1. git commit -am 'chore: bump version to $(VERSION)'"
-	@echo "2. git tag v$(VERSION)"
-	@echo "3. git push && git push --tags"
+	$(call do_version_bump,major)
 
 # Development commands
 update-providers:
