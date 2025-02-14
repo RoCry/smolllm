@@ -1,6 +1,6 @@
 [project]
 name = "smolllm"
-version = "0.1.4"
+version = "0.1.5"
 description = "A minimal Python library for interacting with various LLM providers"
 readme = "README.md"
 authors = [
@@ -33,4 +33,10 @@ smolllm = "smolllm:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[project.optional-dependencies]
+dev = [
+    "twine>=4.0.2",
+    "build>=1.2.2",
+]
 
