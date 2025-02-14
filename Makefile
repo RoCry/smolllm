@@ -50,7 +50,7 @@ define do_version_bump
 	echo "Version bumped: $(VERSION) -> $$NEW_VERSION" && \
 	read -p "Do you want to commit, tag and push? [y/N] " confirm && [ $$confirm = "y" ] && \
 	git commit -am "chore: bump version to $$NEW_VERSION" && \
-	git tag v$$NEW_VERSION && \
+	git tag -m "Release v$$NEW_VERSION" v$$NEW_VERSION && \
 	git push && git push --tags
 endef
 
