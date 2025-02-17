@@ -21,7 +21,7 @@ def prepare_request_data(
         if system_prompt:
             data["system_instruction"] = {"parts": [{"text": system_prompt}]}
     else:
-        url = f"{base_url}/chat/completions"
+        # all openai compatible api
         headers = {"Content-Type": "application/json"}
         messages = []
         if system_prompt:
@@ -32,6 +32,14 @@ def prepare_request_data(
             "model": model_name,
             "stream": True,
         }
+
+        # Handle URL based on suffix
+        if base_url.endswith('#'):
+            url = base_url[:-1]  # Remove the # and use exact URL
+        elif base_url.endswith('/'):
+            url = f"{base_url}chat/completions"  # Skip v1 prefix
+        else:
+            url = f"{base_url}/v1/chat/completions"  # Default pattern
 
     return url, data, headers
 
