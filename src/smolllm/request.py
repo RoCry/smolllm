@@ -8,13 +8,22 @@ def prepare_request_data(
     model_name: str,
     provider_name: str,
     base_url: str,
-) -> tuple[str, Dict[str, Any], Dict[str, str]]:
+) -> tuple[str, Dict[str, Any]]:
     """Prepare request URL, data and headers for the API call"""
     base_url = base_url.rstrip("/")
 
-    if provider_name == "gemini":
+    if provider_name == "anthropic":
+        url = f"{base_url}/v1/messages"
+        data = {
+            "model": model_name,
+            "max_tokens": 4096,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": True,
+        }
+        if system_prompt:
+            data["system"] = system_prompt
+    elif provider_name == "gemini":
         url = f"{base_url}/v1beta/models/{model_name}:streamGenerateContent?alt=sse"
-        headers = {"Content-Type": "application/json"}
         data = {
             "contents": [{"parts": [{"text": prompt}]}],
         }
@@ -22,7 +31,6 @@ def prepare_request_data(
             data["system_instruction"] = {"parts": [{"text": system_prompt}]}
     else:
         # all openai compatible api
-        headers = {"Content-Type": "application/json"}
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
@@ -41,21 +49,27 @@ def prepare_request_data(
         else:
             url = f"{base_url}/v1/chat/completions"  # Default pattern
 
-    return url, data, headers
+    return url, data
 
 
 def prepare_client_and_auth(
-    url: str, provider_name: str, api_key: str, headers: Dict[str, str]
+    url: str, provider_name: str, api_key: str,
 ) -> httpx.AsyncClient:
     """Prepare HTTP client and handle authentication"""
     # Handle authentication
-    if provider_name == "gemini":
+    headers = {
+        "content-type": "application/json"
+    }
+    if provider_name == "anthropic":
+        headers["x-api-key"] = api_key
+        headers["anthropic-version"] = "2023-06-01"
+    elif provider_name == "gemini":
         headers["x-goog-api-key"] = api_key
     else:
-        headers["Authorization"] = f"Bearer {api_key}"
+        headers["authorization"] = f"Bearer {api_key}"
 
     # Prepare client
     unsecure = url.startswith("http://")
     transport = httpx.AsyncHTTPTransport(local_address="0.0.0.0") if unsecure else None
 
-    return httpx.AsyncClient(verify=not unsecure, transport=transport)
+    return httpx.AsyncClient(headers=headers, verify=not unsecure, transport=transport)

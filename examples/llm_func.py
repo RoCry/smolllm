@@ -9,8 +9,8 @@ load_dotenv()
 # Create a custom LLM function with specific configuration
 custom_ollama = partial(
     ask_llm,
-    model="ollama/deepseek-r1:7b",
-    base_url="http://rocry-win.local:11434",
+    # model="ollama/deepseek-r1:7b",
+    # base_url="http://rocry-win.local:11434",
 )
 
 

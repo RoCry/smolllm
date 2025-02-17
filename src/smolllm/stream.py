@@ -7,6 +7,11 @@ async def handle_chunk(chunk: dict, provider_name: str) -> Optional[str]:
         candidates = chunk.get("candidates", [])
         if candidates and "content" in candidates[0]:
             return candidates[0]["content"]["parts"][0]["text"]
+    elif provider_name == "anthropic":
+        if chunk.get("type") == "content_block_delta":
+            return chunk.get("delta", {}).get("text", "")
+        elif chunk.get("type") == "message_stop":
+            return None
     else:  # openai-compatible
         choice = chunk.get("choices", [{}])[0]
         if choice.get("finish_reason") is not None:

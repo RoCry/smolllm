@@ -66,17 +66,17 @@ async def ask_llm(
         raise ValueError("Base URL is required")
 
     api_key, base_url = balancer.choose_pair(api_key, base_url)
-    url, data, headers = prepare_request_data(
+    url, data = prepare_request_data(
         prompt, system_prompt, model_name, provider.name, base_url
     )
-    client = prepare_client_and_auth(url, provider.name, api_key, headers)
+    client = prepare_client_and_auth(url, provider.name, api_key)
 
     api_key_preview = api_key[:5] + "..." + api_key[-4:]
     logger.info(f"Sending {url} model={model_name} api_key={api_key_preview}")
 
     try:
         async with client.stream(
-            "POST", url, headers=headers, json=data, timeout=timeout
+            "POST", url, json=data, timeout=timeout
         ) as response:
             if response.status_code >= 400:
                 error_text = await response.aread()
