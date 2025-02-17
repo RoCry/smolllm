@@ -1,7 +1,7 @@
 """
 Provider configurations - DO NOT EDIT MANUALLY
 Use tools/update_providers.py to update this file
-"""
+via https://github.com/CherryHQ/cherry-studio/blob/main/src/renderer/src/config/providers.ts"""
 
 PROVIDER_CONFIG = {
     "aihubmix": {
@@ -24,6 +24,9 @@ PROVIDER_CONFIG = {
     },
     "deepseek": {
         "base_url": "https://api.deepseek.com",
+    },
+    "dmxapi": {
+        "base_url": "https://www.dmxapi.com",
     },
     "doubao": {
         "base_url": "https://ark.cn-beijing.volces.com/api/v3/",
@@ -55,14 +58,23 @@ PROVIDER_CONFIG = {
     "hyperbolic": {
         "base_url": "https://api.hyperbolic.xyz",
     },
+    "infini": {
+        "base_url": "https://cloud.infini-ai.com",
+    },
     "jina": {
         "base_url": "https://api.jina.ai",
+    },
+    "lmstudio": {
+        "base_url": "http://localhost:1234",
     },
     "minimax": {
         "base_url": "https://api.minimax.chat/v1/",
     },
     "mistral": {
         "base_url": "https://api.mistral.ai",
+    },
+    "modelscope": {
+        "base_url": "https://api-inference.modelscope.cn/v1/",
     },
     "moonshot": {
         "base_url": "https://api.moonshot.cn",
@@ -81,6 +93,9 @@ PROVIDER_CONFIG = {
     },
     "openrouter": {
         "base_url": "https://openrouter.ai/api/v1/",
+    },
+    "perplexity": {
+        "base_url": "https://api.perplexity.ai/",
     },
     "ppio": {
         "base_url": "https://api.ppinfra.com/v3/openai",
