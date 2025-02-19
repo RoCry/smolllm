@@ -72,7 +72,7 @@ async def ask_llm(
     client = prepare_client_and_auth(url, provider.name, api_key)
 
     api_key_preview = api_key[:5] + "..." + api_key[-4:]
-    logger.info(f"Sending {url} model={model_name} api_key={api_key_preview}")
+    logger.info(f"Sending {url} model={model_name} api_key={api_key_preview}, len={len(prompt)}")
 
     try:
         async with client.stream(
