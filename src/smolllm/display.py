@@ -30,10 +30,10 @@ class ResponseDisplay:
         if self.live:
             self.live.__exit__(exc_type, exc_val, exc_tb)
 
-    def update(self, delta: str):
+    async def update(self, delta: str):
         """Update display with new content"""
         if self.stream_handler:
-            self.stream_handler(delta)
+            await self.stream_handler(delta)
 
         self.final_response += delta
         if self.is_interactive:

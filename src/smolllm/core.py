@@ -105,7 +105,7 @@ async def process_stream_response(
             try:
                 chunk = json.loads(line[6:])  # Remove "data: " prefix
                 if delta := await handle_chunk(chunk, provider_name):
-                    display.update(delta)
+                    await display.update(delta)
             except Exception as e:
                 logger.error(f"Error processing chunk: {e}")
 
