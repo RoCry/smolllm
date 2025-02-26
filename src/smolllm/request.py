@@ -42,9 +42,9 @@ def prepare_request_data(
         }
 
         # Handle URL based on suffix
-        if base_url.endswith('#'):
+        if base_url.endswith("#"):
             url = base_url[:-1]  # Remove the # and use exact URL
-        elif base_url.endswith('/'):
+        elif base_url.endswith("/"):
             url = f"{base_url}chat/completions"  # Skip v1 prefix
         else:
             url = f"{base_url}/v1/chat/completions"  # Default pattern
@@ -53,13 +53,13 @@ def prepare_request_data(
 
 
 def prepare_client_and_auth(
-    url: str, provider_name: str, api_key: str,
+    url: str,
+    provider_name: str,
+    api_key: str,
 ) -> httpx.AsyncClient:
     """Prepare HTTP client and handle authentication"""
     # Handle authentication
-    headers = {
-        "content-type": "application/json"
-    }
+    headers = {"content-type": "application/json"}
     if provider_name == "anthropic":
         headers["x-api-key"] = api_key
         headers["anthropic-version"] = "2023-06-01"

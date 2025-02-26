@@ -15,7 +15,7 @@ custom_ollama = partial(
 
 
 def translate(llm: LLMFunction, text: str, to: str = "Chinese"):
-    return llm(f"Translate below text to {to}:\n{text}")
+    return llm(f"Explain the following text in {to}:\n{text}")
 
 
 async def main():

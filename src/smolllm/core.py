@@ -72,12 +72,12 @@ async def ask_llm(
     client = prepare_client_and_auth(url, provider.name, api_key)
 
     api_key_preview = api_key[:5] + "..." + api_key[-4:]
-    logger.info(f"Sending {url} model={model_name} api_key={api_key_preview}, len={len(prompt)}")
+    logger.info(
+        f"Sending {url} model={model_name} api_key={api_key_preview}, len={len(prompt)}"
+    )
 
     try:
-        async with client.stream(
-            "POST", url, json=data, timeout=timeout
-        ) as response:
+        async with client.stream("POST", url, json=data, timeout=timeout) as response:
             if response.status_code >= 400:
                 error_text = await response.aread()
                 raise httpx.HTTPStatusError(

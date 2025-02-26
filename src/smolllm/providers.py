@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 from typing import Optional, Dict
 from .provider_config import PROVIDER_CONFIG
@@ -45,7 +46,15 @@ def parse_model_string(model_str: str) -> tuple[Provider, str]:
 
     provider = PROVIDERS.get(provider_name)
     if not provider:
-        raise ValueError(f"Unknown provider: {provider_name}")
+        # no predefined provider, try to get it from env
+        key = f"{provider_name.upper()}_BASE_URL"
+        base_url = os.getenv(key)
+        if base_url:
+            provider = Provider(name=provider_name, base_url=base_url)
+        else:
+            raise ValueError(
+                f"Unknown provider name={provider_name} and {key} is not set"
+            )
     model_name = model_name or provider.guess_default_model_name()
     if not model_name:
         raise ValueError(f"Model name not found for provider: {provider_name}")

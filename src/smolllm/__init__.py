@@ -7,4 +7,3 @@ from .types import LLMFunction, StreamHandler
 
 __version__ = "0.1.9"
 __all__ = ["ask_llm", "LLMFunction", "StreamHandler"]
-
