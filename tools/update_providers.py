@@ -6,7 +6,7 @@ Usage: python -m tools.update_providers
 
 import json
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 
 
 def read_providers_json() -> Dict[str, Any]:

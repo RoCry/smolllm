@@ -1,7 +1,8 @@
-import os
 import logging
-from rich.logging import RichHandler
+import os
+
 from rich.console import Console
+from rich.logging import RichHandler
 
 # Get log level from environment or default to INFO
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()

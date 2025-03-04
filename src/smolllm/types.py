@@ -1,4 +1,4 @@
-from typing import Callable, Awaitable, Optional, TypeAlias, Any
+from typing import Any, Awaitable, Callable, Optional, TypeAlias
 
 StreamHandler: TypeAlias = Callable[[str], None]
 LLMFunction: TypeAlias = Callable[

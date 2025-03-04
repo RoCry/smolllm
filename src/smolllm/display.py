@@ -1,10 +1,12 @@
-from rich.live import Live
-from rich.text import Text
-from rich.markdown import Markdown
-from rich.console import Group, Console
-from rich.rule import Rule
-from typing import Optional
 import sys
+from typing import Optional
+
+from rich.console import Console, Group
+from rich.live import Live
+from rich.markdown import Markdown
+from rich.rule import Rule
+from rich.text import Text
+
 from .types import StreamHandler
 
 

@@ -50,11 +50,6 @@ class SimpleBalancer:
 
         return chosen_pair
 
-    def choose_one(self, keys: str) -> str:
-        """Legacy method for backwards compatibility"""
-        key, _ = self.choose_pair(keys, "dummy_url")
-        return key
-
 
 # Create a global instance
 balancer = SimpleBalancer()

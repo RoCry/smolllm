@@ -1,7 +1,9 @@
 import asyncio
-from dotenv import load_dotenv
-from smolllm import LLMFunction, ask_llm
 from functools import partial
+
+from dotenv import load_dotenv
+
+from smolllm import LLMFunction, ask_llm
 
 # Load environment variables at application startup
 load_dotenv()

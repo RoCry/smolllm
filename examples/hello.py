@@ -1,6 +1,8 @@
-import asyncio
 import argparse
+import asyncio
+
 from dotenv import load_dotenv
+
 from smolllm import ask_llm
 
 

@@ -1,6 +1,7 @@
 import os
 from dataclasses import dataclass
-from typing import Optional, Dict
+from typing import Dict, Optional
+
 from .provider_config import PROVIDER_CONFIG
 
 

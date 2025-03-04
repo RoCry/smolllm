@@ -1,15 +1,16 @@
-import os
 import json
+import os
 from typing import Optional
+
 import httpx
 
-from .types import StreamHandler
-from .providers import parse_model_string
 from .balancer import balancer
-from .stream import handle_chunk
-from .request import prepare_request_data, prepare_client_and_auth
-from .log import logger
 from .display import ResponseDisplay
+from .log import logger
+from .providers import parse_model_string
+from .request import prepare_client_and_auth, prepare_request_data
+from .stream import handle_chunk
+from .types import StreamHandler
 
 
 async def ask_llm(

@@ -40,3 +40,5 @@ dev = [
     "build>=1.2.2",
 ]
 
+[tool.ruff.lint]
+extend-select = ["I"]
