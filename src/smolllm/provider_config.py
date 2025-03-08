@@ -26,7 +26,7 @@ PROVIDER_CONFIG = {
         "base_url": "https://api.deepseek.com",
     },
     "dmxapi": {
-        "base_url": "https://www.dmxapi.com",
+        "base_url": "https://www.dmxapi.cn",
     },
     "doubao": {
         "base_url": "https://ark.cn-beijing.volces.com/api/v3/",
@@ -59,7 +59,7 @@ PROVIDER_CONFIG = {
         "base_url": "https://api.hyperbolic.xyz",
     },
     "infini": {
-        "base_url": "https://cloud.infini-ai.com",
+        "base_url": "https://cloud.infini-ai.com/maas",
     },
     "jina": {
         "base_url": "https://api.jina.ai",
@@ -81,6 +81,9 @@ PROVIDER_CONFIG = {
     },
     "nvidia": {
         "base_url": "https://integrate.api.nvidia.com",
+    },
+    "o3": {
+        "base_url": "https://api.o3.fan",
     },
     "ocoolai": {
         "base_url": "https://api.ocoolai.com",
@@ -106,8 +109,14 @@ PROVIDER_CONFIG = {
     "stepfun": {
         "base_url": "https://api.stepfun.com",
     },
+    "tencent-cloud-ti": {
+        "base_url": "https://api.lkeap.cloud.tencent.com",
+    },
     "together": {
         "base_url": "https://api.tohgether.xyz",
+    },
+    "xirang": {
+        "base_url": "https://wishub-x1.ctyun.cn",
     },
     "yi": {
         "base_url": "https://api.lingyiwanwu.com",
