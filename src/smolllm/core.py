@@ -24,16 +24,11 @@ async def ask_llm(
     timeout: float = 60.0,
 ) -> str:
     """
-    Send a prompt to an LLM and get the response
-
     Args:
-        prompt: The main prompt text
-        system_prompt: Optional system prompt
-        model: Model identifier (e.g., "openai/gpt-4" or "google")
-        api_key: Optional API key (will fall back to environment variable)
-        base_url: Custom base URL for API endpoint
+        model: provider/model_name (e.g., "openai/gpt-4" or "gemini"), fallback to SMOLLLM_MODEL
+        api_key: Optional API key, fallback to ${PROVIDER}_API_KEY
+        base_url: Custom base URL for API endpoint, fallback to ${PROVIDER}_BASE_URL
         stream_handler: Optional callback for handling streaming responses
-        timeout: Request timeout in seconds
     """
     if not model:
         model = os.getenv("SMOLLLM_MODEL")

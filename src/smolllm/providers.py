@@ -12,7 +12,6 @@ class Provider:
     default_model_name: Optional[str] = None
 
     # Guess default model name if not provided
-    # this is designed for random choosing from multiple providers
     def guess_default_model_name(self) -> Optional[str]:
         if self.default_model_name:
             return self.default_model_name
