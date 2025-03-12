@@ -37,12 +37,13 @@ PROVIDERS = generate_provider_map()
 # "gemini/gemini-2.0-flash" -> ("gemini", "gemini-2.0-flash")
 # "gemini" -> ("gemini", "gemini-2.0-flash") // /w default model for the provider
 def parse_model_string(model_str: str) -> tuple[Provider, str]:
+    model_name = None
+
     if "/" in model_str:
         provider_name, model_name = model_str.split("/", 1)
     else:
         # Use the model string as provider name and get its default model
         provider_name = model_str
-        model_name = None
 
     provider = PROVIDERS.get(provider_name)
     if not provider:
