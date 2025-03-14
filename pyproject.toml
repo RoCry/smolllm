@@ -39,6 +39,9 @@ dev = [
     "twine>=4.0.2",
     "build>=1.2.2",
 ]
+example-smolagents = [
+    "smolagents>=1.10.0",
+]
 
 [tool.ruff.lint]
 extend-select = ["I"]
