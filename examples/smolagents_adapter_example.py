@@ -4,9 +4,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-model = SmolllmModel(model_id="gemini/gemini-2.0-flash")
+model = SmolllmModel(model_id="gemini")
 agent = CodeAgent(tools=[], model=model, add_base_tools=True, max_steps=2)
 
 agent.run(
-    "Could you give me the 118th number in the Fibonacci sequence?",
+    "Could you give me the 30th number in the Fibonacci sequence?",
 )
