@@ -9,10 +9,11 @@ from smolllm import LLMFunction, ask_llm
 load_dotenv()
 
 # Create a custom LLM function with specific configuration
-custom_ollama = partial(
+custom_llm_with_args = partial(
     ask_llm,
-    # model="ollama/deepseek-r1:7b",
-    # base_url="http://rocry-win.local:11434",
+    api_key="pollinations_dont_need_api_key",
+    model="openai/openai-large",
+    base_url="https://text.pollinations.ai/openai#",
 )
 
 
@@ -21,7 +22,7 @@ def translate(llm: LLMFunction, text: str, to: str = "Chinese"):
 
 
 async def main():
-    print(await translate(custom_ollama, "Show me the money"))
+    print(await translate(custom_llm_with_args, "Show me the money"))
 
 
 if __name__ == "__main__":

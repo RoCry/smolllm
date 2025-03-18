@@ -9,7 +9,7 @@ from smolllm import ask_llm
 async def simple(prompt: str = "Say hello world in a creative way"):
     response = await ask_llm(
         prompt,
-        model="gemini/gemini-2.0-flash",  # Default model can be overridden by SMOLLLM_MODEL
+        # model="gemini/gemini-2.0-flash",  # specify model can override env.SMOLLLM_MODEL
     )
     print(response)
 
