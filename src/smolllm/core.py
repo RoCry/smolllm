@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Optional
+from typing import List, Optional
 
 import httpx
 
@@ -22,6 +22,7 @@ async def ask_llm(
     base_url: Optional[str] = None,
     handler: Optional[StreamHandler] = None,
     timeout: float = 60.0,
+    image_paths: Optional[List[str]] = None,
 ) -> str:
     """
     Args:
@@ -29,6 +30,7 @@ async def ask_llm(
         api_key: Optional API key, fallback to ${PROVIDER}_API_KEY
         base_url: Custom base URL for API endpoint, fallback to ${PROVIDER}_BASE_URL
         stream_handler: Optional callback for handling streaming responses
+        image_paths: Optional list of image paths to include with the prompt
     """
     if not model:
         model = os.getenv("SMOLLLM_MODEL")
@@ -63,14 +65,20 @@ async def ask_llm(
 
     api_key, base_url = balancer.choose_pair(api_key, base_url)
     url, data = prepare_request_data(
-        prompt, system_prompt, model_name, provider.name, base_url
+        prompt, system_prompt, model_name, provider.name, base_url, image_paths
     )
     client = prepare_client_and_auth(url, provider.name, api_key)
 
     api_key_preview = api_key[:5] + "..." + api_key[-4:]
-    logger.info(
+
+    # Log information about the request
+    log_message = (
         f"Sending {url} model={model_name} api_key={api_key_preview}, len={len(prompt)}"
     )
+    if image_paths:
+        image_sizes = [os.path.getsize(path) for path in image_paths]
+        log_message += f", with {len(image_paths)} image(s) ({sum(image_sizes)} bytes)"
+    logger.info(log_message)
 
     try:
         async with client.stream("POST", url, json=data, timeout=timeout) as response:
