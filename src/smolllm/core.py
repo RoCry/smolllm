@@ -1,6 +1,6 @@
 import json
 import os
-from typing import List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 import httpx
 
@@ -13,25 +13,16 @@ from .stream import handle_chunk
 from .types import StreamHandler
 
 
-async def ask_llm(
+async def _prepare_llm_call(
     prompt: str,
     *,
     system_prompt: Optional[str] = None,
     model: Optional[str] = None,
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
-    handler: Optional[StreamHandler] = None,
-    timeout: float = 60.0,
     image_paths: Optional[List[str]] = None,
-) -> str:
-    """
-    Args:
-        model: provider/model_name (e.g., "openai/gpt-4" or "gemini"), fallback to SMOLLLM_MODEL
-        api_key: Optional API key, fallback to ${PROVIDER}_API_KEY
-        base_url: Custom base URL for API endpoint, fallback to ${PROVIDER}_BASE_URL
-        stream_handler: Optional callback for handling streaming responses
-        image_paths: Optional list of image paths to include with the prompt
-    """
+) -> Tuple[str, Dict[str, Any], httpx.AsyncClient, str]:
+    """Common setup logic for LLM API calls"""
     if not model:
         model = os.getenv("SMOLLLM_MODEL")
     if not model:
@@ -80,7 +71,38 @@ async def ask_llm(
         log_message += f", with {len(image_paths)} image(s) ({sum(image_sizes)} bytes)"
     logger.info(log_message)
 
+    return url, data, client, provider.name
+
+
+async def ask_llm(
+    prompt: str,
+    *,
+    system_prompt: Optional[str] = None,
+    model: Optional[str] = None,
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+    handler: Optional[StreamHandler] = None,
+    timeout: float = 60.0,
+    image_paths: Optional[List[str]] = None,
+) -> str:
+    """
+    Args:
+        model: provider/model_name (e.g., "openai/gpt-4" or "gemini"), fallback to SMOLLLM_MODEL
+        api_key: Optional API key, fallback to ${PROVIDER}_API_KEY
+        base_url: Custom base URL for API endpoint, fallback to ${PROVIDER}_BASE_URL
+        stream_handler: Optional callback for handling streaming responses
+        image_paths: Optional list of image paths to include with the prompt
+    """
     try:
+        url, data, client, provider_name = await _prepare_llm_call(
+            prompt,
+            system_prompt=system_prompt,
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+            image_paths=image_paths,
+        )
+
         async with client.stream("POST", url, json=data, timeout=timeout) as response:
             if response.status_code >= 400:
                 error_text = await response.aread()
@@ -89,7 +111,60 @@ async def ask_llm(
                     request=response.request,
                     response=response,
                 )
-            return await process_stream_response(response, handler, provider.name)
+            return await process_stream_response(response, handler, provider_name)
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        raise
+
+
+async def stream_llm(
+    prompt: str,
+    *,
+    system_prompt: Optional[str] = None,
+    model: Optional[str] = None,
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+    timeout: float = 60.0,
+    image_paths: Optional[List[str]] = None,
+) -> AsyncGenerator[str, None]:
+    """Similar to ask_llm but yields chunks of text as they arrive.
+
+    Args:
+        model: provider/model_name (e.g., "openai/gpt-4" or "gemini"), fallback to SMOLLLM_MODEL
+        api_key: Optional API key, fallback to ${PROVIDER}_API_KEY
+        base_url: Custom base URL for API endpoint, fallback to ${PROVIDER}_BASE_URL
+        image_paths: Optional list of image paths to include with the prompt
+    """
+    try:
+        url, data, client, provider_name = await _prepare_llm_call(
+            prompt,
+            system_prompt=system_prompt,
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+            image_paths=image_paths,
+        )
+
+        async with client.stream("POST", url, json=data, timeout=timeout) as response:
+            if response.status_code >= 400:
+                error_text = await response.aread()
+                raise httpx.HTTPStatusError(
+                    f"HTTP Error {response.status_code}: {error_text.decode()}",
+                    request=response.request,
+                    response=response,
+                )
+
+            async for line in response.aiter_lines():
+                line = line.strip()
+                if not line or line == "data: [DONE]" or not line.startswith("data: "):
+                    continue
+
+                try:
+                    chunk = json.loads(line[6:])  # Remove "data: " prefix
+                    if delta := await handle_chunk(chunk, provider_name):
+                        yield delta
+                except Exception as e:
+                    logger.error(f"Error processing chunk: {e}")
     except Exception as e:
         logger.error(f"Error: {e}")
         raise
