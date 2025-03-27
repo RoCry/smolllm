@@ -3,15 +3,16 @@ import asyncio
 
 from dotenv import load_dotenv
 
-from smolllm import ask_llm
+from smolllm import stream_llm
 
 
 async def simple(prompt: str = "Say hello world in a creative way"):
-    response = await ask_llm(
+    response = stream_llm(
         prompt,
         # model="gemini/gemini-2.0-flash",  # specify model can override env.SMOLLLM_MODEL
     )
-    print(response)
+    async for r in response:
+        print(r, end="", flush=True)
 
 
 async def main():
