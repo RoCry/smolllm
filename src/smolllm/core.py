@@ -11,6 +11,7 @@ from .providers import parse_model_string
 from .request import prepare_client_and_auth, prepare_request_data
 from .stream import handle_chunk
 from .types import StreamHandler
+from .utils import strip_backticks
 
 
 async def _prepare_llm_call(
@@ -83,6 +84,7 @@ async def ask_llm(
     base_url: Optional[str] = None,
     handler: Optional[StreamHandler] = None,
     timeout: float = 60.0,
+    remove_backticks: bool = False,
     image_paths: Optional[List[str]] = None,
 ) -> str:
     """
@@ -90,7 +92,8 @@ async def ask_llm(
         model: provider/model_name (e.g., "openai/gpt-4" or "gemini"), fallback to SMOLLLM_MODEL
         api_key: Optional API key, fallback to ${PROVIDER}_API_KEY
         base_url: Custom base URL for API endpoint, fallback to ${PROVIDER}_BASE_URL
-        stream_handler: Optional callback for handling streaming responses
+        handler: Optional callback for handling streaming responses
+        remove_backticks: Whether to remove backticks from the response, e.g. ```markdown\nblabla\n``` -> blabla
         image_paths: Optional list of image paths to include with the prompt
     """
     try:
@@ -111,7 +114,10 @@ async def ask_llm(
                     request=response.request,
                     response=response,
                 )
-            return await process_stream_response(response, handler, provider_name)
+            resp = await process_stream_response(response, handler, provider_name)
+            if remove_backticks:
+                resp = strip_backticks(resp)
+            return resp
     except Exception as e:
         logger.error(f"Error: {e}")
         raise
