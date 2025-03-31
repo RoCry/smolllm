@@ -16,6 +16,9 @@ install-dev: clean
 build: install-dev
 	python -m build
 
+test:
+	uv run pytest -s -v tests/*
+
 # Manual release commands
 test-release: build
 	@echo "Uploading version $(VERSION) to Test PyPI..."

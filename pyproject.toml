@@ -39,6 +39,9 @@ dev = [
     "twine>=4.0.2",
     "build>=1.2.2",
 ]
+test = [
+    "pytest>=8.3.5",
+]
 
 [tool.ruff.lint]
 extend-select = ["I"]
