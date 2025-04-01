@@ -83,7 +83,7 @@ async def ask_llm(
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
     handler: Optional[StreamHandler] = None,
-    timeout: float = 60.0,
+    timeout: float = 120.0,
     remove_backticks: bool = False,
     image_paths: Optional[List[str]] = None,
 ) -> str:
@@ -130,7 +130,7 @@ async def stream_llm(
     model: Optional[str] = None,
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
-    timeout: float = 60.0,
+    timeout: float = 120.0,
     image_paths: Optional[List[str]] = None,
 ) -> AsyncGenerator[str, None]:
     """Similar to ask_llm but yields chunks of text as they arrive.
