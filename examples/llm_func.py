@@ -1,12 +1,7 @@
 import asyncio
 from functools import partial
 
-from dotenv import load_dotenv
-
 from smolllm import LLMFunction, ask_llm
-
-# Load environment variables at application startup
-load_dotenv()
 
 # Create a custom LLM function with specific configuration
 custom_llm_with_args = partial(
