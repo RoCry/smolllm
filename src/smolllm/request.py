@@ -21,83 +21,6 @@ def encode_image(image_path: str) -> tuple[str, str]:
     return image_data, mime_type
 
 
-def _prepare_anthropic_request(
-    prompt: PromptType,
-    system_prompt: str | None,
-    model_name: str,
-    image_paths: List[str],
-) -> Dict[str, Any]:
-    content = []
-
-    if isinstance(prompt, str):
-        content.append({"type": "text", "text": prompt})
-    else:
-        # Convert message history to Anthropic format
-        messages = []
-        for msg in prompt:
-            content = [{"type": "text", "text": msg["content"]}]
-            messages.append({"role": msg["role"], "content": content})
-        return {
-            "model": model_name,
-            "max_tokens": 4096,
-            "messages": messages,
-            "stream": True,
-            "system": system_prompt if system_prompt else None,
-        }
-
-    for image_path in image_paths:
-        image_data, mime_type = encode_image(image_path)
-        content.append(
-            {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": mime_type,
-                    "data": image_data,
-                },
-            }
-        )
-
-    data = {
-        "model": model_name,
-        "max_tokens": 4096,
-        "messages": [{"role": "user", "content": content}],
-        "stream": True,
-    }
-    if system_prompt:
-        data["system"] = system_prompt
-    return data
-
-
-def _prepare_gemini_request(
-    prompt: PromptType,
-    system_prompt: str | None,
-    image_paths: List[str],
-) -> Dict[str, Any]:
-    if isinstance(prompt, list):
-        # Gemini doesn't support chat history directly, concatenate messages
-        text = "\n".join(f"{msg['role']}: {msg['content']}" for msg in prompt)
-        parts = [{"text": text}]
-    else:
-        parts = [{"text": prompt}]
-
-    for image_path in image_paths:
-        image_data, mime_type = encode_image(image_path)
-        parts.append(
-            {
-                "inline_data": {
-                    "mime_type": mime_type,
-                    "data": image_data,
-                }
-            }
-        )
-
-    data = {"contents": [{"parts": parts}]}
-    if system_prompt:
-        data["system_instruction"] = {"parts": [{"text": system_prompt}]}
-    return data
-
-
 def _prepare_openai_request(
     prompt: PromptType,
     system_prompt: str | None,
@@ -109,6 +32,10 @@ def _prepare_openai_request(
         messages.append({"role": "system", "content": system_prompt})
 
     if isinstance(prompt, list):
+        if image_paths:
+            raise ValueError(
+                "Image paths are not supported with list prompt, you could put the images in the prompt instead"
+            )
         messages.extend(prompt)
     else:
         if image_paths:
@@ -145,13 +72,11 @@ def prepare_request_data(
     image_paths = image_paths or []
 
     if provider_name == "anthropic":
-        url = f"{base_url}/v1/messages"
-        data = _prepare_anthropic_request(
-            prompt, system_prompt, model_name, image_paths
-        )
+        # [OpenAI SDK compatibility (beta) - Anthropic](https://docs.anthropic.com/en/api/openai-sdk)
+        url = f"{base_url}/v1"
     elif provider_name == "gemini":
-        url = f"{base_url}/v1beta/models/{model_name}:streamGenerateContent?alt=sse"
-        data = _prepare_gemini_request(prompt, system_prompt, image_paths)
+        # [OpenAI compatibility | Gemini API](https://ai.google.dev/gemini-api/docs/openai)
+        url = f"{base_url}/v1beta/openai/chat/completions"
     else:
         # Handle URL based on suffix
         if base_url.endswith("#"):
@@ -160,26 +85,20 @@ def prepare_request_data(
             url = f"{base_url}chat/completions"
         else:
             url = f"{base_url}/v1/chat/completions"
-        data = _prepare_openai_request(prompt, system_prompt, model_name, image_paths)
+    data = _prepare_openai_request(prompt, system_prompt, model_name, image_paths)
 
     return url, data
 
 
 def prepare_client_and_auth(
     url: str,
-    provider_name: str,
     api_key: str,
 ) -> httpx.AsyncClient:
     """Prepare HTTP client and handle authentication"""
-    # Handle authentication
-    headers = {"content-type": "application/json"}
-    if provider_name == "anthropic":
-        headers["x-api-key"] = api_key
-        headers["anthropic-version"] = "2023-06-01"
-    elif provider_name == "gemini":
-        headers["x-goog-api-key"] = api_key
-    else:
-        headers["authorization"] = f"Bearer {api_key}"
+    headers = {
+        "content-type": "application/json",
+        "authorization": f"Bearer {api_key}",
+    }
 
     # Prepare client
     unsecure = url.startswith("http://")

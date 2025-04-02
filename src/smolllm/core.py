@@ -59,7 +59,7 @@ async def _prepare_llm_call(
     url, data = prepare_request_data(
         prompt, system_prompt, model_name, provider.name, base_url, image_paths
     )
-    client = prepare_client_and_auth(url, provider.name, api_key)
+    client = prepare_client_and_auth(url, api_key)
 
     api_key_preview = api_key[:5] + "..." + api_key[-4:]
 
@@ -114,7 +114,7 @@ async def ask_llm(
                     request=response.request,
                     response=response,
                 )
-            resp = await process_stream_response(response, handler, provider_name)
+            resp = await process_stream_response(response, handler)
             if remove_backticks:
                 resp = strip_backticks(resp)
             return resp
@@ -167,7 +167,7 @@ async def stream_llm(
 
                 try:
                     chunk = json.loads(line[6:])  # Remove "data: " prefix
-                    if delta := await handle_chunk(chunk, provider_name):
+                    if delta := handle_chunk(chunk):
                         yield delta
                 except Exception as e:
                     logger.error(f"Error processing chunk: {e}")
@@ -179,7 +179,6 @@ async def stream_llm(
 async def process_stream_response(
     response: httpx.Response,
     stream_handler: Optional[StreamHandler],
-    provider_name: str,
 ) -> str:
     with ResponseDisplay(stream_handler) as display:
         async for line in response.aiter_lines():
@@ -189,7 +188,7 @@ async def process_stream_response(
 
             try:
                 chunk = json.loads(line[6:])  # Remove "data: " prefix
-                if delta := await handle_chunk(chunk, provider_name):
+                if delta := await handle_chunk(chunk):
                     await display.update(delta)
             except Exception as e:
                 logger.error(f"Error processing chunk: {e}")
