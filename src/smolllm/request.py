@@ -4,6 +4,8 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from .types import PromptType
+
 
 def get_mime_type(image_path: str) -> str:
     """Get the MIME type of a file based on its extension"""
@@ -19,8 +21,119 @@ def encode_image(image_path: str) -> tuple[str, str]:
     return image_data, mime_type
 
 
+def _prepare_anthropic_request(
+    prompt: PromptType,
+    system_prompt: str | None,
+    model_name: str,
+    image_paths: List[str],
+) -> Dict[str, Any]:
+    content = []
+
+    if isinstance(prompt, str):
+        content.append({"type": "text", "text": prompt})
+    else:
+        # Convert message history to Anthropic format
+        messages = []
+        for msg in prompt:
+            content = [{"type": "text", "text": msg["content"]}]
+            messages.append({"role": msg["role"], "content": content})
+        return {
+            "model": model_name,
+            "max_tokens": 4096,
+            "messages": messages,
+            "stream": True,
+            "system": system_prompt if system_prompt else None,
+        }
+
+    for image_path in image_paths:
+        image_data, mime_type = encode_image(image_path)
+        content.append(
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": mime_type,
+                    "data": image_data,
+                },
+            }
+        )
+
+    data = {
+        "model": model_name,
+        "max_tokens": 4096,
+        "messages": [{"role": "user", "content": content}],
+        "stream": True,
+    }
+    if system_prompt:
+        data["system"] = system_prompt
+    return data
+
+
+def _prepare_gemini_request(
+    prompt: PromptType,
+    system_prompt: str | None,
+    image_paths: List[str],
+) -> Dict[str, Any]:
+    if isinstance(prompt, list):
+        # Gemini doesn't support chat history directly, concatenate messages
+        text = "\n".join(f"{msg['role']}: {msg['content']}" for msg in prompt)
+        parts = [{"text": text}]
+    else:
+        parts = [{"text": prompt}]
+
+    for image_path in image_paths:
+        image_data, mime_type = encode_image(image_path)
+        parts.append(
+            {
+                "inline_data": {
+                    "mime_type": mime_type,
+                    "data": image_data,
+                }
+            }
+        )
+
+    data = {"contents": [{"parts": parts}]}
+    if system_prompt:
+        data["system_instruction"] = {"parts": [{"text": system_prompt}]}
+    return data
+
+
+def _prepare_openai_request(
+    prompt: PromptType,
+    system_prompt: str | None,
+    model_name: str,
+    image_paths: List[str],
+) -> Dict[str, Any]:
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+
+    if isinstance(prompt, list):
+        messages.extend(prompt)
+    else:
+        if image_paths:
+            content = [{"type": "text", "text": prompt}]
+            for image_path in image_paths:
+                image_data, mime_type = encode_image(image_path)
+                content.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{mime_type};base64,{image_data}"},
+                    }
+                )
+            messages.append({"role": "user", "content": content})
+        else:
+            messages.append({"role": "user", "content": prompt})
+
+    return {
+        "messages": messages,
+        "model": model_name,
+        "stream": True,
+    }
+
+
 def prepare_request_data(
-    prompt: str,
+    prompt: PromptType,
     system_prompt: str | None,
     model_name: str,
     provider_name: str,
@@ -33,95 +146,21 @@ def prepare_request_data(
 
     if provider_name == "anthropic":
         url = f"{base_url}/v1/messages"
-
-        # Prepare message content with text and images
-        content = []
-        content.append({"type": "text", "text": prompt})
-
-        # Add images if provided
-        for image_path in image_paths:
-            image_data, mime_type = encode_image(image_path)
-            content.append(
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": mime_type,
-                        "data": image_data,
-                    },
-                }
-            )
-
-        data = {
-            "model": model_name,
-            "max_tokens": 4096,
-            "messages": [{"role": "user", "content": content}],
-            "stream": True,
-        }
-
-        if system_prompt:
-            data["system"] = system_prompt
+        data = _prepare_anthropic_request(
+            prompt, system_prompt, model_name, image_paths
+        )
     elif provider_name == "gemini":
         url = f"{base_url}/v1beta/models/{model_name}:streamGenerateContent?alt=sse"
-
-        # Prepare parts with text and images
-        parts = [{"text": prompt}]
-
-        # Add images if provided
-        for image_path in image_paths:
-            image_data, mime_type = encode_image(image_path)
-            parts.append(
-                {
-                    "inline_data": {
-                        "mime_type": mime_type,
-                        "data": image_data,
-                    }
-                }
-            )
-
-        data = {
-            "contents": [{"parts": parts}],
-        }
-
-        if system_prompt:
-            data["system_instruction"] = {"parts": [{"text": system_prompt}]}
+        data = _prepare_gemini_request(prompt, system_prompt, image_paths)
     else:
-        # OpenAI compatible API
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-
-        # For OpenAI, format images in the content array
-        if image_paths:
-            content = []
-            content.append({"type": "text", "text": prompt})
-
-            for image_path in image_paths:
-                image_data, mime_type = encode_image(image_path)
-                content.append(
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:{mime_type};base64,{image_data}"},
-                    }
-                )
-
-            messages.append({"role": "user", "content": content})
-        else:
-            messages.append({"role": "user", "content": prompt})
-
-        data = {
-            "messages": messages,
-            "model": model_name,
-            "stream": True,
-        }
-
         # Handle URL based on suffix
         if base_url.endswith("#"):
-            url = base_url[:-1]  # Remove the # and use exact URL
+            url = base_url[:-1]
         elif base_url.endswith("/"):
-            url = f"{base_url}chat/completions"  # Skip v1 prefix
+            url = f"{base_url}chat/completions"
         else:
-            url = f"{base_url}/v1/chat/completions"  # Default pattern
+            url = f"{base_url}/v1/chat/completions"
+        data = _prepare_openai_request(prompt, system_prompt, model_name, image_paths)
 
     return url, data
 

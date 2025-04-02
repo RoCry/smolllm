@@ -10,12 +10,12 @@ from .log import logger
 from .providers import parse_model_string
 from .request import prepare_client_and_auth, prepare_request_data
 from .stream import handle_chunk
-from .types import StreamHandler
+from .types import PromptType, StreamHandler
 from .utils import strip_backticks
 
 
 async def _prepare_llm_call(
-    prompt: str,
+    prompt: PromptType,
     *,
     system_prompt: Optional[str] = None,
     model: Optional[str] = None,
@@ -76,7 +76,7 @@ async def _prepare_llm_call(
 
 
 async def ask_llm(
-    prompt: str,
+    prompt: PromptType,
     *,
     system_prompt: Optional[str] = None,
     model: Optional[str] = None,
@@ -124,7 +124,7 @@ async def ask_llm(
 
 
 async def stream_llm(
-    prompt: str,
+    prompt: PromptType,
     *,
     system_prompt: Optional[str] = None,
     model: Optional[str] = None,
