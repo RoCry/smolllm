@@ -51,6 +51,7 @@ define do_version_bump
 		exit 1; \
 	fi && \
 	echo "Version bumped: $(VERSION) -> $$NEW_VERSION" && \
+	uv run examples/simple.py && echo "\nTest passed\n" && \
 	read -p "Do you want to commit, tag and push? [y/N] " confirm && [ $$confirm = "y" ] && \
 	git commit -am "chore: bump version to $$NEW_VERSION" && \
 	git tag -m "Release v$$NEW_VERSION" v$$NEW_VERSION && \
