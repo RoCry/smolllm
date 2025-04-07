@@ -6,7 +6,5 @@ def handle_chunk(chunk: dict) -> Optional[str]:
     if not choices:
         return None
     choice = choices[0]
-    content = choice.get("delta", {}).get("content", "")
-    if content:
-        return content
-    return None
+    content = choice.get("delta", {}).get("content")
+    return content
