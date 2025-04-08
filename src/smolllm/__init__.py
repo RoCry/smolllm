@@ -5,7 +5,7 @@ smolllm - A minimal LLM library for easy interaction with various LLM providers
 from .core import ask_llm, stream_llm
 from .types import LLMFunction, Message, MessageRole, PromptType, StreamHandler
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 __all__ = [
     "ask_llm",
     "stream_llm",
