@@ -7,18 +7,21 @@ import httpx
 from .types import PromptType
 
 
-def get_mime_type(image_path: str) -> str:
-    """Get the MIME type of a file based on its extension"""
+def _guess_mime_type(image_path: str) -> str:
     mime_type, _ = mimetypes.guess_type(image_path)
-    return mime_type or "application/octet-stream"
+    if not mime_type:
+        raise ValueError(f"Can't guess mime type for: '{image_path}'")
+    return mime_type
 
 
-def encode_image(image_path: str) -> tuple[str, str]:
-    """Encode image to base64 and get mime type"""
-    mime_type = get_mime_type(image_path)
+def _image_path_to_llm_data_str(image_path: str) -> str:
+    # check if image_path is already a data string, e.g. data:image/png;base64,...
+    if image_path.startswith("data:"):
+        return image_path
+    mime_type = _guess_mime_type(image_path)
     with open(image_path, "rb") as img_file:
         image_data = base64.b64encode(img_file.read()).decode()
-    return image_data, mime_type
+    return f"data:{mime_type};base64,{image_data}"
 
 
 def _prepare_openai_request(
@@ -41,11 +44,10 @@ def _prepare_openai_request(
         if image_paths:
             content = [{"type": "text", "text": prompt}]
             for image_path in image_paths:
-                image_data, mime_type = encode_image(image_path)
                 content.append(
                     {
                         "type": "image_url",
-                        "image_url": {"url": f"data:{mime_type};base64,{image_data}"},
+                        "image_url": {"url": _image_path_to_llm_data_str(image_path)},
                     }
                 )
             messages.append({"role": "user", "content": content})

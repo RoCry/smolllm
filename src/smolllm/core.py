@@ -69,7 +69,7 @@ async def _prepare_llm_call(
     )
     log_message = f"Sending {url} model={model_name} api_key={api_key_preview}, chars={chars_count}"
     if image_paths:
-        image_sizes = [os.path.getsize(path) for path in image_paths]
+        image_sizes = [os.path.getsize(path) for path in image_paths if not path.startswith("data:")]
         log_message += f", with {len(image_paths)} image(s) ({sum(image_sizes)} bytes)"
     logger.info(log_message)
 
