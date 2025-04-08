@@ -63,15 +63,11 @@ async def _prepare_llm_call(
 
     api_key_preview = api_key[:5] + "..." + api_key[-4:]
 
-    # Log information about the request
-    chars_count = (
-        len(prompt) if isinstance(prompt, str) else sum(len(p) for p in prompt)
+    logger.info(
+        f"Sending {url} model={model_name} api_key={api_key_preview}"
+        # simply log the length of the data
+        f" len(data)={len(str(data))}"
     )
-    log_message = f"Sending {url} model={model_name} api_key={api_key_preview}, chars={chars_count}"
-    if image_paths:
-        image_sizes = [os.path.getsize(path) for path in image_paths if not path.startswith("data:")]
-        log_message += f", with {len(image_paths)} image(s) ({sum(image_sizes)} bytes)"
-    logger.info(log_message)
 
     return url, data, client, provider.name
 
