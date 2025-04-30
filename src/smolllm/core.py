@@ -14,6 +14,16 @@ from .types import PromptType, StreamHandler
 from .utils import strip_backticks
 
 
+def _parse_models(model_str: Optional[str]) -> List[str]:
+    if not model_str:
+        model_str = os.getenv("SMOLLLM_MODEL")
+    if not model_str:
+        raise ValueError(
+            "Model string not found. Set SMOLLLM_MODEL environment variable or pass model parameter"
+        )
+    return [m.strip() for m in model_str.split(",")]
+
+
 # returns url, data for the request, client
 async def _prepare_llm_call(
     prompt: PromptType,
@@ -88,37 +98,46 @@ async def ask_llm(
     """
     Args:
         model: provider/model_name (e.g., "openai/gpt-4" or "gemini"), fallback to SMOLLLM_MODEL
+              Can also specify multiple models as comma-separated list (e.g., "gemini/gemini-2.0-flash,gemini/gemini-2.5-pro")
         api_key: Optional API key, fallback to ${PROVIDER}_API_KEY
         base_url: Custom base URL for API endpoint, fallback to ${PROVIDER}_BASE_URL
         handler: Optional callback for handling streaming responses
         remove_backticks: Whether to remove backticks from the response, e.g. ```markdown\nblabla\n``` -> blabla
         image_paths: Optional list of image paths to include with the prompt
     """
-    try:
-        url, data, client = await _prepare_llm_call(
-            prompt,
-            system_prompt=system_prompt,
-            model=model,
-            api_key=api_key,
-            base_url=base_url,
-            image_paths=image_paths,
-        )
+    last_error = None
+    for m in _parse_models(model):
+        try:
+            url, data, client = await _prepare_llm_call(
+                prompt,
+                system_prompt=system_prompt,
+                model=m,
+                api_key=api_key,
+                base_url=base_url,
+                image_paths=image_paths,
+            )
 
-        async with client.stream("POST", url, json=data, timeout=timeout) as response:
-            if response.status_code >= 400:
-                error_text = await response.aread()
-                raise httpx.HTTPStatusError(
-                    f"HTTP Error {response.status_code}: {error_text.decode()}",
-                    request=response.request,
-                    response=response,
-                )
-            resp = await process_stream_response(response, handler)
-            if remove_backticks:
-                resp = strip_backticks(resp)
-            return resp
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        raise
+            async with client.stream(
+                "POST", url, json=data, timeout=timeout
+            ) as response:
+                if response.status_code >= 400:
+                    error_text = await response.aread()
+                    raise httpx.HTTPStatusError(
+                        f"HTTP Error {response.status_code}: {error_text.decode()}",
+                        request=response.request,
+                        response=response,
+                    )
+                resp = await process_stream_response(response, handler)
+                if remove_backticks:
+                    resp = strip_backticks(resp)
+                return resp
+        except Exception as e:
+            last_error = e
+            logger.warning(f"Failed to get response from model {m}: {e}")
+            continue
+    if last_error:
+        raise last_error
+    raise ValueError("No valid models found")
 
 
 async def stream_llm(
@@ -135,43 +154,57 @@ async def stream_llm(
 
     Args:
         model: provider/model_name (e.g., "openai/gpt-4" or "gemini"), fallback to SMOLLLM_MODEL
+              Can also specify multiple models as comma-separated list (e.g., "gemini/gemini-2.0-flash,gemini/gemini-2.5-pro")
         api_key: Optional API key, fallback to ${PROVIDER}_API_KEY
         base_url: Custom base URL for API endpoint, fallback to ${PROVIDER}_BASE_URL
         image_paths: Optional list of image paths to include with the prompt
     """
-    try:
-        url, data, client = await _prepare_llm_call(
-            prompt,
-            system_prompt=system_prompt,
-            model=model,
-            api_key=api_key,
-            base_url=base_url,
-            image_paths=image_paths,
-        )
+    last_error = None
+    for m in _parse_models(model):
+        try:
+            url, data, client = await _prepare_llm_call(
+                prompt,
+                system_prompt=system_prompt,
+                model=m,
+                api_key=api_key,
+                base_url=base_url,
+                image_paths=image_paths,
+            )
 
-        async with client.stream("POST", url, json=data, timeout=timeout) as response:
-            if response.status_code >= 400:
-                error_text = await response.aread()
-                raise httpx.HTTPStatusError(
-                    f"HTTP Error {response.status_code}: {error_text.decode()}",
-                    request=response.request,
-                    response=response,
-                )
+            async with client.stream(
+                "POST", url, json=data, timeout=timeout
+            ) as response:
+                if response.status_code >= 400:
+                    error_text = await response.aread()
+                    raise httpx.HTTPStatusError(
+                        f"HTTP Error {response.status_code}: {error_text.decode()}",
+                        request=response.request,
+                        response=response,
+                    )
 
-            async for line in response.aiter_lines():
-                line = line.strip()
-                if not line or line == "data: [DONE]" or not line.startswith("data: "):
-                    continue
+                async for line in response.aiter_lines():
+                    line = line.strip()
+                    if (
+                        not line
+                        or line == "data: [DONE]"
+                        or not line.startswith("data: ")
+                    ):
+                        continue
 
-                try:
-                    chunk = json.loads(line[6:])  # Remove "data: " prefix
-                    if delta := handle_chunk(chunk):
-                        yield delta
-                except Exception as e:
-                    logger.error(f"Error processing chunk: {e}")
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        raise
+                    try:
+                        chunk = json.loads(line[6:])  # Remove "data: " prefix
+                        if delta := handle_chunk(chunk):
+                            yield delta
+                    except Exception as e:
+                        logger.error(f"Error processing chunk: {e}")
+                return  # Successfully completed streaming
+        except Exception as e:
+            last_error = e
+            logger.warning(f"Failed to stream from model {m}: {e}")
+            continue
+    if last_error:
+        raise last_error
+    raise ValueError("No valid models found")
 
 
 async def process_stream_response(
