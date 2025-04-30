@@ -22,8 +22,7 @@ def generate_config_code(providers: Dict[str, Any]) -> str:
         '"""',
         "Provider configurations - DO NOT EDIT MANUALLY",
         "Use tools/update_providers.py to update this file",
-        "via https://github.com/CherryHQ/cherry-studio/blob/main/src/renderer/src/config/providers.ts"
-        '"""',
+        'via https://github.com/CherryHQ/cherry-studio/blob/main/src/renderer/src/config/providers.ts"""',
         "",
         "PROVIDER_CONFIG = {",
     ]

@@ -1,6 +1,5 @@
-import json
 import os
-from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
+from typing import Any, AsyncGenerator, Dict, List, Literal, Optional, Tuple
 
 import httpx
 
@@ -9,7 +8,7 @@ from .display import ResponseDisplay
 from .log import logger
 from .providers import parse_model_string
 from .request import prepare_client_and_auth, prepare_request_data
-from .stream import handle_chunk
+from .stream import process_chunk_line
 from .types import PromptType, StreamHandler
 from .utils import strip_backticks
 
@@ -22,6 +21,23 @@ def _parse_models(model_str: Optional[str]) -> List[str]:
             "Model string not found. Set SMOLLLM_MODEL environment variable or pass model parameter"
         )
     return [m.strip() for m in model_str.split(",")]
+
+
+def _get_env_var(
+    provider_name: str,
+    var_type: Literal["API_KEY", "BASE_URL"],
+    default: Optional[str] = None,
+) -> str:
+    """Get environment variable for a provider with fallback to default"""
+    env_key = f"{provider_name.upper()}_{var_type}"
+    value = os.getenv(env_key, default)
+    if not value and var_type == "API_KEY" and provider_name == "ollama":
+        return "ollama"
+    if not value:
+        raise ValueError(
+            f"{var_type} not found. Set {env_key} environment variable or pass {var_type.lower()} parameter"
+        )
+    return value
 
 
 # returns url, data for the request, client
@@ -43,28 +59,8 @@ async def _prepare_llm_call(
         )
     provider, model_name = parse_model_string(model)
 
-    if not base_url:
-        env_key = f"{provider.name.upper()}_BASE_URL"
-        base_url = os.getenv(env_key) or provider.base_url
-        if not base_url:
-            raise ValueError(
-                f"Base URL not found. Set {env_key} environment variable or pass base_url parameter"
-            )
-
-    if not api_key:
-        env_key = f"{provider.name.upper()}_API_KEY"
-        api_key = os.getenv(env_key)
-        if not api_key:
-            # special case for convenience: ollama
-            if provider.name == "ollama":
-                api_key = "ollama"
-            else:
-                raise ValueError(
-                    f"API key not found. Set {env_key} environment variable or pass api_key parameter"
-                )
-
-    if not base_url:
-        raise ValueError("Base URL is required")
+    base_url = base_url or _get_env_var(provider.name, "BASE_URL", provider.base_url)
+    api_key = api_key or _get_env_var(provider.name, "API_KEY")
 
     api_key, base_url = balancer.choose_pair(api_key, base_url)
     url, data = prepare_request_data(
@@ -73,14 +69,21 @@ async def _prepare_llm_call(
     client = prepare_client_and_auth(url, api_key)
 
     api_key_preview = api_key[:5] + "..." + api_key[-4:]
-
     logger.info(
-        f"Sending {url} model={model_name} api_key={api_key_preview}"
-        # simply log the length of the data
-        f" len(data)={len(str(data))}"
+        f"Sending {url} model={model_name} api_key={api_key_preview} len(data)={len(str(data))}"
     )
 
     return url, data, client
+
+
+async def _handle_http_error(response: httpx.Response) -> None:
+    if response.status_code >= 400:
+        error_text = await response.aread()
+        raise httpx.HTTPStatusError(
+            f"HTTP Error {response.status_code}: {error_text.decode()}",
+            request=response.request,
+            response=response,
+        )
 
 
 async def ask_llm(
@@ -120,14 +123,8 @@ async def ask_llm(
             async with client.stream(
                 "POST", url, json=data, timeout=timeout
             ) as response:
-                if response.status_code >= 400:
-                    error_text = await response.aread()
-                    raise httpx.HTTPStatusError(
-                        f"HTTP Error {response.status_code}: {error_text.decode()}",
-                        request=response.request,
-                        response=response,
-                    )
-                resp = await process_stream_response(response, handler)
+                await _handle_http_error(response)
+                resp = await _process_stream_response(response, handler)
                 if remove_backticks:
                     resp = strip_backticks(resp)
                 return resp
@@ -174,29 +171,11 @@ async def stream_llm(
             async with client.stream(
                 "POST", url, json=data, timeout=timeout
             ) as response:
-                if response.status_code >= 400:
-                    error_text = await response.aread()
-                    raise httpx.HTTPStatusError(
-                        f"HTTP Error {response.status_code}: {error_text.decode()}",
-                        request=response.request,
-                        response=response,
-                    )
+                await _handle_http_error(response)
 
                 async for line in response.aiter_lines():
-                    line = line.strip()
-                    if (
-                        not line
-                        or line == "data: [DONE]"
-                        or not line.startswith("data: ")
-                    ):
-                        continue
-
-                    try:
-                        chunk = json.loads(line[6:])  # Remove "data: " prefix
-                        if delta := handle_chunk(chunk):
-                            yield delta
-                    except Exception as e:
-                        logger.error(f"Error processing chunk: {e}")
+                    if data := await process_chunk_line(line):
+                        yield data
                 return  # Successfully completed streaming
         except Exception as e:
             last_error = e
@@ -207,21 +186,12 @@ async def stream_llm(
     raise ValueError("No valid models found")
 
 
-async def process_stream_response(
+async def _process_stream_response(
     response: httpx.Response,
     stream_handler: Optional[StreamHandler],
 ) -> str:
     with ResponseDisplay(stream_handler) as display:
         async for line in response.aiter_lines():
-            line = line.strip()
-            if not line or line == "data: [DONE]" or not line.startswith("data: "):
-                continue
-
-            try:
-                chunk = json.loads(line[6:])  # Remove "data: " prefix
-                if delta := handle_chunk(chunk):
-                    await display.update(delta)
-            except Exception as e:
-                logger.error(f"Error processing chunk: {e}")
-
+            if delta := await process_chunk_line(line):
+                await display.update(delta)
         return display.finalize()
