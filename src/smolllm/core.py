@@ -14,6 +14,7 @@ from .types import PromptType, StreamHandler
 from .utils import strip_backticks
 
 
+# returns url, data for the request, client
 async def _prepare_llm_call(
     prompt: PromptType,
     *,
@@ -22,7 +23,7 @@ async def _prepare_llm_call(
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
     image_paths: Optional[List[str]] = None,
-) -> Tuple[str, Dict[str, Any], httpx.AsyncClient, str]:
+) -> Tuple[str, Dict[str, Any], httpx.AsyncClient]:
     """Common setup logic for LLM API calls"""
     if not model:
         model = os.getenv("SMOLLLM_MODEL")
@@ -69,7 +70,7 @@ async def _prepare_llm_call(
         f" len(data)={len(str(data))}"
     )
 
-    return url, data, client, provider.name
+    return url, data, client
 
 
 async def ask_llm(
@@ -94,7 +95,7 @@ async def ask_llm(
         image_paths: Optional list of image paths to include with the prompt
     """
     try:
-        url, data, client, provider_name = await _prepare_llm_call(
+        url, data, client = await _prepare_llm_call(
             prompt,
             system_prompt=system_prompt,
             model=model,
@@ -139,7 +140,7 @@ async def stream_llm(
         image_paths: Optional list of image paths to include with the prompt
     """
     try:
-        url, data, client, provider_name = await _prepare_llm_call(
+        url, data, client = await _prepare_llm_call(
             prompt,
             system_prompt=system_prompt,
             model=model,
