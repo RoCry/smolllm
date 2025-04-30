@@ -24,10 +24,7 @@ class Provider:
 
 def generate_provider_map() -> Dict[str, Provider]:
     """Generate provider mapping from static configuration"""
-    return {
-        name: Provider(name=name, base_url=config["base_url"])
-        for name, config in PROVIDER_CONFIG.items()
-    }
+    return {name: Provider(name=name, base_url=config["base_url"]) for name, config in PROVIDER_CONFIG.items()}
 
 
 PROVIDERS = generate_provider_map()
@@ -53,9 +50,7 @@ def parse_model_string(model_str: str) -> tuple[Provider, str]:
         if base_url:
             provider = Provider(name=provider_name, base_url=base_url)
         else:
-            raise ValueError(
-                f"Unknown provider name={provider_name} and {key} is not set"
-            )
+            raise ValueError(f"Unknown provider name={provider_name} and {key} is not set")
     model_name = model_name or provider.guess_default_model_name()
     if not model_name:
         raise ValueError(f"Model name not found for provider: {provider_name}")

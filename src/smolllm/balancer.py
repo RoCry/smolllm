@@ -30,9 +30,7 @@ class SimpleBalancer:
             pairs = [(key_list[0], url) for url in url_list]
         else:
             if len(key_list) != len(url_list):
-                raise ValueError(
-                    "When using multiple keys and URLs, their counts must match"
-                )
+                raise ValueError("When using multiple keys and URLs, their counts must match")
             pairs = list(zip(key_list, url_list))
 
         # Initialize usage count for new pairs
@@ -42,9 +40,7 @@ class SimpleBalancer:
 
         # Find and choose least used pair
         min_usage = min(self.pair_usage[pair] for pair in pairs)
-        least_used_pairs = [
-            pair for pair in pairs if self.pair_usage[pair] == min_usage
-        ]
+        least_used_pairs = [pair for pair in pairs if self.pair_usage[pair] == min_usage]
         chosen_pair = random.choice(least_used_pairs)
         self.pair_usage[chosen_pair] += 1
 

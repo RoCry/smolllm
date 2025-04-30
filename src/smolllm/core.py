@@ -17,9 +17,7 @@ def _parse_models(model_str: Optional[str]) -> List[str]:
     if not model_str:
         model_str = os.getenv("SMOLLLM_MODEL")
     if not model_str:
-        raise ValueError(
-            "Model string not found. Set SMOLLLM_MODEL environment variable or pass model parameter"
-        )
+        raise ValueError("Model string not found. Set SMOLLLM_MODEL environment variable or pass model parameter")
     return [m.strip() for m in model_str.split(",")]
 
 
@@ -54,24 +52,18 @@ async def _prepare_llm_call(
     if not model:
         model = os.getenv("SMOLLLM_MODEL")
     if not model:
-        raise ValueError(
-            "Model string not found. Set SMOLLLM_MODEL environment variable or pass model parameter"
-        )
+        raise ValueError("Model string not found. Set SMOLLLM_MODEL environment variable or pass model parameter")
     provider, model_name = parse_model_string(model)
 
     base_url = base_url or _get_env_var(provider.name, "BASE_URL", provider.base_url)
     api_key = api_key or _get_env_var(provider.name, "API_KEY")
 
     api_key, base_url = balancer.choose_pair(api_key, base_url)
-    url, data = prepare_request_data(
-        prompt, system_prompt, model_name, provider.name, base_url, image_paths
-    )
+    url, data = prepare_request_data(prompt, system_prompt, model_name, provider.name, base_url, image_paths)
     client = prepare_client_and_auth(url, api_key)
 
     api_key_preview = api_key[:5] + "..." + api_key[-4:]
-    logger.info(
-        f"Sending {url} model={model_name} api_key={api_key_preview} len(data)={len(str(data))}"
-    )
+    logger.info(f"Sending {url} model={model_name} api_key={api_key_preview} len(data)={len(str(data))}")
 
     return url, data, client
 
@@ -120,9 +112,7 @@ async def ask_llm(
                 image_paths=image_paths,
             )
 
-            async with client.stream(
-                "POST", url, json=data, timeout=timeout
-            ) as response:
+            async with client.stream("POST", url, json=data, timeout=timeout) as response:
                 await _handle_http_error(response)
                 resp = await _process_stream_response(response, handler)
                 if remove_backticks:
@@ -168,9 +158,7 @@ async def stream_llm(
                 image_paths=image_paths,
             )
 
-            async with client.stream(
-                "POST", url, json=data, timeout=timeout
-            ) as response:
+            async with client.stream("POST", url, json=data, timeout=timeout) as response:
                 await _handle_http_error(response)
 
                 async for line in response.aiter_lines():

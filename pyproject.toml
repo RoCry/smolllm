@@ -45,3 +45,7 @@ test = [
 
 [tool.ruff.lint]
 extend-select = ["I"]
+
+[tool.ruff]
+# since we are using large display
+line-length = 120

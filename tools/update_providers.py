@@ -47,9 +47,7 @@ def update_provider_config():
     providers = read_providers_json()
     code = generate_config_code(providers)
 
-    config_path = (
-        Path(__file__).parent.parent / "src" / "smolllm" / "provider_config.py"
-    )
+    config_path = Path(__file__).parent.parent / "src" / "smolllm" / "provider_config.py"
     with open(config_path, "w") as f:
         f.write(code)
 

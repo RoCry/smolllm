@@ -31,9 +31,7 @@ def write_version(file_path: Path, new_version: str) -> None:
             content,
         )
     elif file_path.suffix == ".toml":
-        new_content = re.sub(
-            r'version\s*=\s*["\']([^"\']+)["\']', f'version = "{new_version}"', content
-        )
+        new_content = re.sub(r'version\s*=\s*["\']([^"\']+)["\']', f'version = "{new_version}"', content)
     file_path.write_text(new_content)
 
 
