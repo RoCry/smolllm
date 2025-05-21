@@ -13,12 +13,14 @@ from .types import PromptType, StreamHandler
 from .utils import strip_backticks
 
 
-def _parse_models(model_str: Optional[str]) -> List[str]:
-    if not model_str:
-        model_str = os.getenv("SMOLLLM_MODEL")
-    if not model_str:
+def _parse_models(model: Optional[str | List[str]]) -> List[str]:
+    if model and isinstance(model, list):
+        return model
+    if not model:
+        model = os.getenv("SMOLLLM_MODEL")
+    if not model:
         raise ValueError("Model string not found. Set SMOLLLM_MODEL environment variable or pass model parameter")
-    return [m.strip() for m in model_str.split(",")]
+    return [m.strip() for m in model.split(",")]
 
 
 def _get_env_var(
@@ -82,7 +84,7 @@ async def ask_llm(
     prompt: PromptType,
     *,
     system_prompt: Optional[str] = None,
-    model: Optional[str] = None,
+    model: Optional[str | List[str]] = None,
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
     handler: Optional[StreamHandler] = None,
@@ -131,7 +133,7 @@ async def stream_llm(
     prompt: PromptType,
     *,
     system_prompt: Optional[str] = None,
-    model: Optional[str] = None,
+    model: Optional[str | List[str]] = None,
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
     timeout: float = 120.0,
