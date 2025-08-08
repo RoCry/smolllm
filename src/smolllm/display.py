@@ -45,7 +45,10 @@ class ResponseDisplay:
         """Show final response without cursor"""
         if self.is_interactive:
             self._update_display(with_cursor=False)
-        return self.final_response.strip()
+        result = self.final_response.strip()
+        if not result:
+            raise ValueError("LLM returned an empty response")
+        return result
 
     def _update_display(self, with_cursor: bool = True):
         """Internal method to update the live display"""

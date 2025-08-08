@@ -117,6 +117,8 @@ async def ask_llm(
             async with client.stream("POST", url, json=data, timeout=timeout) as response:
                 await _handle_http_error(response)
                 resp = await _process_stream_response(response, handler)
+                if not resp or not resp.strip():
+                    raise ValueError(f"Received empty response from model {m}")
                 if remove_backticks:
                     resp = strip_backticks(resp)
                 return resp
