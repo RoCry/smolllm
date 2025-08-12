@@ -1,15 +1,15 @@
 import os
-from typing import Any, AsyncGenerator, Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import httpx
 
 from .balancer import balancer
 from .display import ResponseDisplay
 from .log import logger
-from .providers import parse_model_string
+from .providers import Provider, parse_model_string
 from .request import prepare_client_and_auth, prepare_request_data
 from .stream import process_chunk_line
-from .types import PromptType, StreamHandler
+from .types import LLMResponse, PromptType, StreamHandler, StreamResponse
 from .utils import strip_backticks
 
 
@@ -49,8 +49,12 @@ async def _prepare_llm_call(
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
     image_paths: Optional[List[str]] = None,
-) -> Tuple[str, Dict[str, Any], httpx.AsyncClient]:
-    """Common setup logic for LLM API calls"""
+) -> Tuple[str, Dict[str, Any], httpx.AsyncClient, Provider, str]:
+    """Common setup logic for LLM API calls
+
+    Returns:
+        tuple of (url, data, client, provider, model_name)
+    """
     if not model:
         model = os.getenv("SMOLLLM_MODEL")
     if not model:
@@ -67,7 +71,7 @@ async def _prepare_llm_call(
     api_key_preview = api_key[:5] + "..." + api_key[-4:]
     logger.info(f"Sending {url} model={model_name} api_key={api_key_preview} len(data)={len(str(data))}")
 
-    return url, data, client
+    return url, data, client, provider, model_name
 
 
 async def _handle_http_error(response: httpx.Response) -> None:
@@ -91,7 +95,7 @@ async def ask_llm(
     timeout: float = 120.0,
     remove_backticks: bool = False,
     image_paths: Optional[List[str]] = None,
-) -> str:
+) -> LLMResponse:
     """
     Args:
         model: provider/model_name (e.g., "openai/gpt-4" or "gemini"), fallback to SMOLLLM_MODEL
@@ -101,11 +105,14 @@ async def ask_llm(
         handler: Optional callback for handling streaming responses
         remove_backticks: Whether to remove backticks from the response, e.g. ```markdown\nblabla\n``` -> blabla
         image_paths: Optional list of image paths to include with the prompt
+
+    Returns:
+        LLMResponse object containing the text response, model used, and provider
     """
     last_error = None
     for m in _parse_models(model):
         try:
-            url, data, client = await _prepare_llm_call(
+            url, data, client, provider, model_name = await _prepare_llm_call(
                 prompt,
                 system_prompt=system_prompt,
                 model=m,
@@ -121,7 +128,7 @@ async def ask_llm(
                     raise ValueError(f"Received empty response from model {m}")
                 if remove_backticks:
                     resp = strip_backticks(resp)
-                return resp
+                return LLMResponse(text=resp, model=m, model_name=model_name, provider=provider.name)
         except Exception as e:
             last_error = e
             logger.warning(f"Failed to get response from model {m}: {e}")
@@ -140,7 +147,7 @@ async def stream_llm(
     base_url: Optional[str] = None,
     timeout: float = 120.0,
     image_paths: Optional[List[str]] = None,
-) -> AsyncGenerator[str, None]:
+) -> StreamResponse:
     """Similar to ask_llm but yields chunks of text as they arrive.
 
     Args:
@@ -149,11 +156,14 @@ async def stream_llm(
         api_key: Optional API key, fallback to ${PROVIDER}_API_KEY
         base_url: Custom base URL for API endpoint, fallback to ${PROVIDER}_BASE_URL
         image_paths: Optional list of image paths to include with the prompt
+
+    Returns:
+        StreamResponse object with stream iterator and model information
     """
     last_error = None
     for m in _parse_models(model):
         try:
-            url, data, client = await _prepare_llm_call(
+            url, data, client, provider, model_name = await _prepare_llm_call(
                 prompt,
                 system_prompt=system_prompt,
                 model=m,
@@ -162,13 +172,14 @@ async def stream_llm(
                 image_paths=image_paths,
             )
 
-            async with client.stream("POST", url, json=data, timeout=timeout) as response:
-                await _handle_http_error(response)
+            async def _stream():
+                async with client.stream("POST", url, json=data, timeout=timeout) as response:
+                    await _handle_http_error(response)
+                    async for line in response.aiter_lines():
+                        if chunk_data := await process_chunk_line(line):
+                            yield chunk_data
 
-                async for line in response.aiter_lines():
-                    if data := await process_chunk_line(line):
-                        yield data
-                return  # Successfully completed streaming
+            return StreamResponse(stream=_stream(), model=m, model_name=model_name, provider=provider.name)
         except Exception as e:
             last_error = e
             logger.warning(f"Failed to stream from model {m}: {e}")

@@ -7,7 +7,8 @@ from smolllm import LLMFunction, ask_llm
 custom_llm_with_args = partial(
     ask_llm,
     api_key="pollinations_dont_need_api_key",
-    model="openai/openai-large",
+    # GET https://text.pollinations.ai/models
+    model="openai/openai-fast",
     base_url="https://text.pollinations.ai/openai#",
 )
 
@@ -17,7 +18,11 @@ def translate(llm: LLMFunction, text: str, to: str = "Chinese"):
 
 
 async def main():
-    print(await translate(custom_llm_with_args, "Show me the money"))
+    response = await translate(custom_llm_with_args, "Show me the money")
+    print(f"response: {response}")
+    print(f"model: {response.model}")
+    print(f"model_name: {response.model_name}")
+    print(f"provider: {response.provider}")
 
 
 if __name__ == "__main__":
