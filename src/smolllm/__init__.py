@@ -3,7 +3,15 @@ smolllm - A minimal LLM library for easy interaction with various LLM providers
 """
 
 from .core import ask_llm, stream_llm
-from .types import LLMFunction, Message, MessageRole, PromptType, StreamHandler
+from .types import (
+    LLMFunction,
+    LLMResponse,
+    Message,
+    MessageRole,
+    PromptType,
+    StreamHandler,
+    StreamResponse,
+)
 
 __version__ = "0.3.1"
 __all__ = [
@@ -14,4 +22,6 @@ __all__ = [
     "PromptType",
     "Message",
     "MessageRole",
+    "LLMResponse",
+    "StreamResponse",
 ]

@@ -14,9 +14,10 @@ prompt = [
 
 
 async def main():
-    response = stream_llm(prompt)
+    response = await stream_llm(prompt)
     async for r in response:
         print(r, end="", flush=True)
+    print()
 
 
 if __name__ == "__main__":
