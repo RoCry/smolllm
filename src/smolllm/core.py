@@ -6,6 +6,7 @@ import httpx
 from .balancer import balancer
 from .display import ResponseDisplay
 from .log import logger
+from .metrics import estimate_tokens, format_metrics
 from .providers import Provider, parse_model_string
 from .request import prepare_client_and_auth, prepare_request_data
 from .stream import process_chunk_line
@@ -69,7 +70,7 @@ async def _prepare_llm_call(
     client = prepare_client_and_auth(url, api_key)
 
     api_key_preview = api_key[:5] + "..." + api_key[-4:]
-    logger.info(f"Sending {url} model={model_name} api_key={api_key_preview} len(data)={len(str(data))}")
+    logger.info(f"Sending {url} model={model_name} api_key={api_key_preview} ~tokens={estimate_tokens(str(data))}")
 
     return url, data, client, provider, model_name
 
@@ -121,6 +122,11 @@ async def ask_llm(
                 image_paths=image_paths,
             )
 
+            import time
+
+            input_tokens = estimate_tokens(str(data))
+            start_time = time.perf_counter()
+
             async with client.stream("POST", url, json=data, timeout=timeout) as response:
                 await _handle_http_error(response)
                 resp = await _process_stream_response(response, handler)
@@ -128,6 +134,12 @@ async def ask_llm(
                     raise ValueError(f"Received empty response from model {m}")
                 if remove_backticks:
                     resp = strip_backticks(resp)
+
+                total_time = time.perf_counter() - start_time
+                output_tokens = estimate_tokens(resp)
+
+                logger.info(format_metrics(model_name, input_tokens, output_tokens, total_time))
+
                 return LLMResponse(text=resp, model=m, model_name=model_name, provider=provider.name)
         except Exception as e:
             last_error = e
@@ -172,12 +184,32 @@ async def stream_llm(
                 image_paths=image_paths,
             )
 
+            input_tokens = estimate_tokens(str(data))
+
             async def _stream():
+                import time
+
+                accumulated_response = []
+                start_time = time.perf_counter()
+                first_token_time = None
+
                 async with client.stream("POST", url, json=data, timeout=timeout) as response:
                     await _handle_http_error(response)
                     async for line in response.aiter_lines():
                         if chunk_data := await process_chunk_line(line):
+                            if first_token_time is None:
+                                first_token_time = time.perf_counter()
+                            accumulated_response.append(chunk_data)
                             yield chunk_data
+
+                # Log metrics after streaming completes
+                if accumulated_response:
+                    full_response = "".join(accumulated_response)
+                    output_tokens = estimate_tokens(full_response)
+                    total_time = time.perf_counter() - start_time
+                    ttft_ms = int((first_token_time - start_time) * 1000) if first_token_time else 0
+
+                    logger.info(format_metrics(model_name, input_tokens, output_tokens, total_time, ttft_ms))
 
             return StreamResponse(stream=_stream(), model=m, model_name=model_name, provider=provider.name)
         except Exception as e:
