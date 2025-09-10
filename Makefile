@@ -2,7 +2,7 @@
 
 # Helper functions
 define get_version
-$(shell python -c "from src.smolllm import __version__; print(__version__)")
+$(shell uv run python -c "from src.smolllm import __version__; print(__version__)")
 endef
 
 VERSION := $(call get_version)
@@ -44,8 +44,8 @@ define do_version_bump
 	fi
 	@echo "Current version: $(VERSION)"
 	@read -p "Are you sure you want to bump $(1) version? [y/N] " confirm && [ $$confirm = "y" ]
-	python tools/bump_version.py $(1)
-	@NEW_VERSION=$$(python -c "from src.smolllm import __version__; print(__version__)") && \
+	uv run python tools/bump_version.py $(1)
+	@NEW_VERSION=$$(uv run python -c "from src.smolllm import __version__; print(__version__)") && \
 	if [ -z "$$NEW_VERSION" ]; then \
 		echo "Error: Could not determine new version"; \
 		exit 1; \
@@ -69,4 +69,4 @@ bump-major:
 
 # Development commands
 update-providers:
-	python tools/update_providers.py
+	uv run python tools/update_providers.py
