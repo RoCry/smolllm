@@ -44,7 +44,7 @@ define do_version_bump
 	fi
 	@echo "Current version: $(VERSION)"
 	@read -p "Are you sure you want to bump $(1) version? [y/N] " confirm && [ $$confirm = "y" ]
-	uv run python tools/bump_version.py $(1)
+	uv run tools/bump_version.py $(1)
 	@NEW_VERSION=$$(uv run python -c "from src.smolllm import __version__; print(__version__)") && \
 	if [ -z "$$NEW_VERSION" ]; then \
 		echo "Error: Could not determine new version"; \
@@ -69,4 +69,4 @@ bump-major:
 
 # Development commands
 update-providers:
-	uv run python tools/update_providers.py
+	uv run tools/update_providers.py
