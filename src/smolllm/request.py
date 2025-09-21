@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import base64
 import mimetypes
-from typing import Any, Dict, List, Optional
+from collections.abc import Sequence
 
 import httpx
 
-from .types import PromptType
+from .types import Message, PromptType
 
 
 def _guess_mime_type(image_path: str) -> str:
@@ -28,13 +30,13 @@ def _prepare_openai_request(
     prompt: PromptType,
     system_prompt: str | None,
     model_name: str,
-    image_paths: List[str],
-) -> Dict[str, Any]:
-    messages = []
+    image_paths: Sequence[str],
+) -> dict[str, object]:
+    messages: list[Message] = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
 
-    if isinstance(prompt, list):
+    if not isinstance(prompt, str):
         if image_paths:
             raise ValueError(
                 "Image paths are not supported with list prompt, you could put the images in the prompt instead"
@@ -42,7 +44,7 @@ def _prepare_openai_request(
         messages.extend(prompt)
     else:
         if image_paths:
-            content = [{"type": "text", "text": prompt}]
+            content: list[dict[str, object]] = [{"type": "text", "text": prompt}]
             for image_path in image_paths:
                 content.append(
                     {
@@ -67,10 +69,10 @@ def prepare_request_data(
     model_name: str,
     provider_name: str,
     base_url: str,
-    image_paths: Optional[List[str]] = None,
-) -> tuple[str, Dict[str, Any]]:
+    image_paths: Sequence[str] | None = None,
+) -> tuple[str, dict[str, object]]:
     """Prepare request URL, data and headers for the API call"""
-    image_paths = image_paths or []
+    image_path_list = list(image_paths) if image_paths else []
 
     if provider_name == "anthropic":
         # [OpenAI SDK compatibility (beta) - Anthropic](https://docs.anthropic.com/en/api/openai-sdk)
@@ -86,7 +88,7 @@ def prepare_request_data(
             url = f"{base_url}chat/completions"
         else:
             url = f"{base_url}/v1/chat/completions"
-    data = _prepare_openai_request(prompt, system_prompt, model_name, image_paths)
+    data = _prepare_openai_request(prompt, system_prompt, model_name, image_path_list)
 
     return url, data
 

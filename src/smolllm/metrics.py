@@ -11,7 +11,7 @@ def format_metrics(
     input_tokens: int,
     output_tokens: int,
     total_time: float,
-    ttft_ms: int = None,
+    ttft_ms: int | None = None,
 ) -> str:
     """Format metrics for logging with emojis.
 

@@ -1,17 +1,18 @@
+from __future__ import annotations
+
 import random
-from typing import Dict, Tuple
 
 
 class SimpleBalancer:
     """Balances API key and URL pairs usage."""
 
     def __init__(self):
-        self.pair_usage: Dict[Tuple[str, str], int] = {}
+        self.pair_usage: dict[tuple[str, str], int] = {}
 
     def _parse_items(self, items: str) -> list[str]:
         return [item.strip() for item in items.split(",")]
 
-    def choose_pair(self, keys: str, urls: str) -> Tuple[str, str]:
+    def choose_pair(self, keys: str, urls: str) -> tuple[str, str]:
         """Choose a key-URL pair based on usage balancing.
 
         Cases:
@@ -31,7 +32,7 @@ class SimpleBalancer:
         else:
             if len(key_list) != len(url_list):
                 raise ValueError("When using multiple keys and URLs, their counts must match")
-            pairs = list(zip(key_list, url_list))
+            pairs = list(zip(key_list, url_list, strict=True))
 
         # Initialize usage count for new pairs
         for pair in pairs:

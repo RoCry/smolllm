@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import sys
-from typing import Optional
+from types import TracebackType
 
 from rich.console import Console, Group
 from rich.live import Live
@@ -11,14 +13,14 @@ from .types import StreamHandler
 
 
 class ResponseDisplay:
-    def __init__(self, stream_handler: Optional[StreamHandler] = None):
-        self.stream_handler = stream_handler
-        self.final_response = ""
-        self.live: Optional[Live] = None
+    def __init__(self, stream_handler: StreamHandler | None = None):
+        self.stream_handler: StreamHandler | None = stream_handler
+        self.final_response: str = ""
+        self.live: Live | None = None
         # Check if we're in an interactive terminal
-        self.is_interactive = sys.stdout.isatty() and sys.stderr.isatty()
+        self.is_interactive: bool = sys.stdout.isatty() and sys.stderr.isatty()
 
-    def __enter__(self):
+    def __enter__(self) -> ResponseDisplay:
         if self.is_interactive:
             self.live = Live(
                 Group(Rule(style="grey50"), Text(""), Rule(style="grey50")),
@@ -28,11 +30,16 @@ class ResponseDisplay:
             ).__enter__()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         if self.live:
             self.live.__exit__(exc_type, exc_val, exc_tb)
 
-    async def update(self, delta: str):
+    async def update(self, delta: str) -> None:
         """Update display with new content"""
         if self.stream_handler:
             await self.stream_handler(delta)
@@ -41,7 +48,7 @@ class ResponseDisplay:
         if self.is_interactive:
             self._update_display(with_cursor=True)
 
-    def finalize(self):
+    def finalize(self) -> str:
         """Show final response without cursor"""
         if self.is_interactive:
             self._update_display(with_cursor=False)
@@ -50,7 +57,7 @@ class ResponseDisplay:
             raise ValueError("LLM returned an empty response")
         return result
 
-    def _update_display(self, with_cursor: bool = True):
+    def _update_display(self, with_cursor: bool = True) -> None:
         """Internal method to update the live display"""
         if not self.live:
             return
@@ -60,10 +67,7 @@ class ResponseDisplay:
             group = Group(Rule(style="grey50"), Markdown(content), Rule(style="grey50"))
         except Exception:
             # Fallback to plain text if markdown parsing fails
-            group = Group(
-                Rule(style="grey50"),
-                Text(content, style="blink" if with_cursor else None),
-                Rule(style="grey50"),
-            )
+            text = Text(content, style="blink") if with_cursor else Text(content)
+            group = Group(Rule(style="grey50"), text, Rule(style="grey50"))
 
         self.live.update(group)

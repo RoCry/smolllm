@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass
-from typing import Dict, Optional
 
 from .provider_config import PROVIDER_CONFIG
 
@@ -9,10 +10,10 @@ from .provider_config import PROVIDER_CONFIG
 class Provider:
     name: str
     base_url: str
-    default_model_name: Optional[str] = None
+    default_model_name: str | None = None
 
     # Guess default model name if not provided
-    def guess_default_model_name(self) -> Optional[str]:
+    def guess_default_model_name(self) -> str | None:
         if self.default_model_name:
             return self.default_model_name
 
@@ -22,7 +23,7 @@ class Provider:
         return None
 
 
-def generate_provider_map() -> Dict[str, Provider]:
+def generate_provider_map() -> dict[str, Provider]:
     """Generate provider mapping from static configuration"""
     return {name: Provider(name=name, base_url=config["base_url"]) for name, config in PROVIDER_CONFIG.items()}
 

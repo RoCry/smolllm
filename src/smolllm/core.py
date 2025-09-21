@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import os
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from collections.abc import Sequence
+from typing import Literal
 
 import httpx
 
@@ -14,24 +17,35 @@ from .types import LLMResponse, PromptType, StreamHandler, StreamResponse
 from .utils import strip_backticks
 
 
-def _parse_models(model: Optional[str | List[str]]) -> List[str]:
-    if model and isinstance(model, list):
-        return model
-    if not model:
-        model = os.getenv("SMOLLLM_MODEL")
-    if not model:
-        raise ValueError("Model string not found. Set SMOLLLM_MODEL environment variable or pass model parameter")
-    return [m.strip() for m in model.split(",")]
+def _parse_models(model: str | Sequence[str] | None) -> list[str]:
+    """Normalise model input into a list of concrete model identifiers."""
+
+    candidate: str | Sequence[str] | None = model if model is not None else os.getenv("SMOLLLM_MODEL")
+    if candidate is None:
+        raise ValueError(
+            "Model string not found. Set SMOLLLM_MODEL environment variable or pass model parameter"
+        )
+
+    if isinstance(candidate, str):
+        models = [m.strip() for m in candidate.split(",") if m.strip()]
+        if not models:
+            raise ValueError("Model string must contain at least one non-empty entry")
+        return models
+
+    models = [item.strip() for item in candidate]
+    if not models or any(not item for item in models):
+        raise ValueError("Model sequence entries must be non-empty strings")
+    return models
 
 
 def _get_env_var(
     provider_name: str,
     var_type: Literal["API_KEY", "BASE_URL"],
-    default: Optional[str] = None,
+    default: str | None = None,
 ) -> str:
     """Get environment variable for a provider with fallback to default"""
     env_key = f"{provider_name.upper()}_{var_type}"
-    value = os.getenv(env_key, default)
+    value: str | None = os.getenv(env_key, default)
     if not value and var_type == "API_KEY" and provider_name == "ollama":
         return "ollama"
     if not value:
@@ -45,12 +59,12 @@ def _get_env_var(
 async def _prepare_llm_call(
     prompt: PromptType,
     *,
-    system_prompt: Optional[str] = None,
-    model: Optional[str] = None,
-    api_key: Optional[str] = None,
-    base_url: Optional[str] = None,
-    image_paths: Optional[List[str]] = None,
-) -> Tuple[str, Dict[str, Any], httpx.AsyncClient, Provider, str]:
+    system_prompt: str | None = None,
+    model: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    image_paths: Sequence[str] | None = None,
+) -> tuple[str, dict[str, object], httpx.AsyncClient, Provider, str]:
     """Common setup logic for LLM API calls
 
     Returns:
@@ -66,7 +80,8 @@ async def _prepare_llm_call(
     api_key = api_key or _get_env_var(provider.name, "API_KEY")
 
     api_key, base_url = balancer.choose_pair(api_key, base_url)
-    url, data = prepare_request_data(prompt, system_prompt, model_name, provider.name, base_url, image_paths)
+    image_list = list(image_paths) if image_paths else None
+    url, data = prepare_request_data(prompt, system_prompt, model_name, provider.name, base_url, image_list)
     client = prepare_client_and_auth(url, api_key)
 
     api_key_preview = api_key[:5] + "..." + api_key[-4:]
@@ -88,14 +103,14 @@ async def _handle_http_error(response: httpx.Response) -> None:
 async def ask_llm(
     prompt: PromptType,
     *,
-    system_prompt: Optional[str] = None,
-    model: Optional[str | List[str]] = None,
-    api_key: Optional[str] = None,
-    base_url: Optional[str] = None,
-    handler: Optional[StreamHandler] = None,
+    system_prompt: str | None = None,
+    model: str | Sequence[str] | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    handler: StreamHandler | None = None,
     timeout: float = 120.0,
     remove_backticks: bool = False,
-    image_paths: Optional[List[str]] = None,
+    image_paths: Sequence[str] | None = None,
 ) -> LLMResponse:
     """
     Args:
@@ -110,7 +125,7 @@ async def ask_llm(
     Returns:
         LLMResponse object containing the text response, model used, and provider
     """
-    last_error = None
+    last_error: Exception | None = None
     for m in _parse_models(model):
         try:
             url, data, client, provider, model_name = await _prepare_llm_call(
@@ -153,12 +168,12 @@ async def ask_llm(
 async def stream_llm(
     prompt: PromptType,
     *,
-    system_prompt: Optional[str] = None,
-    model: Optional[str | List[str]] = None,
-    api_key: Optional[str] = None,
-    base_url: Optional[str] = None,
+    system_prompt: str | None = None,
+    model: str | Sequence[str] | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
     timeout: float = 120.0,
-    image_paths: Optional[List[str]] = None,
+    image_paths: Sequence[str] | None = None,
 ) -> StreamResponse:
     """Similar to ask_llm but yields chunks of text as they arrive.
 
@@ -172,7 +187,7 @@ async def stream_llm(
     Returns:
         StreamResponse object with stream iterator and model information
     """
-    last_error = None
+    last_error: Exception | None = None
     for m in _parse_models(model):
         try:
             url, data, client, provider, model_name = await _prepare_llm_call(
@@ -189,9 +204,9 @@ async def stream_llm(
             async def _stream():
                 import time
 
-                accumulated_response = []
+                accumulated_response: list[str] = []
                 start_time = time.perf_counter()
-                first_token_time = None
+                first_token_time: float | None = None
 
                 async with client.stream("POST", url, json=data, timeout=timeout) as response:
                     await _handle_http_error(response)
@@ -223,7 +238,7 @@ async def stream_llm(
 
 async def _process_stream_response(
     response: httpx.Response,
-    stream_handler: Optional[StreamHandler],
+    stream_handler: StreamHandler | None,
 ) -> str:
     with ResponseDisplay(stream_handler) as display:
         async for line in response.aiter_lines():

@@ -2,13 +2,13 @@ import asyncio
 
 from dotenv import load_dotenv
 
-from smolllm import stream_llm
+from smolllm import StreamResponse, stream_llm
 
-load_dotenv()
+_ = load_dotenv()
 
 
-async def main(prompt: str = "Say hello world in a creative way"):
-    response = await stream_llm(
+async def main(prompt: str = "Say hello world in a creative way") -> None:
+    response: StreamResponse = await stream_llm(
         prompt,
         # model="gemini/gemini-2.0-flash",  # specify model can override env.SMOLLLM_MODEL
         # model=[
