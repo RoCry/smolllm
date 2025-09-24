@@ -22,9 +22,7 @@ def _parse_models(model: str | Sequence[str] | None) -> list[str]:
 
     candidate: str | Sequence[str] | None = model if model is not None else os.getenv("SMOLLLM_MODEL")
     if candidate is None:
-        raise ValueError(
-            "Model string not found. Set SMOLLLM_MODEL environment variable or pass model parameter"
-        )
+        raise ValueError("Model string not found. Set SMOLLLM_MODEL environment variable or pass model parameter")
 
     if isinstance(candidate, str):
         models = [m.strip() for m in candidate.split(",") if m.strip()]

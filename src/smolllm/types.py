@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Literal, Protocol, TypedDict, override
 
 
-@dataclass
+@dataclass(slots=True)
 class LLMResponse:
     """High-level response container with provider metadata."""
 
@@ -22,7 +22,7 @@ class LLMResponse:
         return bool(self.text and self.text.strip())
 
 
-@dataclass
+@dataclass(slots=True)
 class StreamResponse:
     """Wrapper for streaming responses with model metadata."""
 
