@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Sequence
+from time import perf_counter
 from typing import Literal
 
 import httpx
@@ -135,23 +136,21 @@ async def ask_llm(
                 image_paths=image_paths,
             )
 
-            import time
-
             input_tokens = estimate_tokens(str(data))
-            start_time = time.perf_counter()
+            start_time = perf_counter()
 
             async with client.stream("POST", url, json=data, timeout=timeout) as response:
                 await _handle_http_error(response)
-                resp = await _process_stream_response(response, handler)
-                if not resp or not resp.strip():
+                resp, ttft_ms = await _process_stream_response(response, handler, start_time)
+                if not resp:
                     raise ValueError(f"Received empty response from model {m}")
                 if remove_backticks:
                     resp = strip_backticks(resp)
 
-                total_time = time.perf_counter() - start_time
+                total_time = perf_counter() - start_time
                 output_tokens = estimate_tokens(resp)
 
-                logger.info(format_metrics(model_name, input_tokens, output_tokens, total_time))
+                logger.info(format_metrics(model_name, input_tokens, output_tokens, total_time, ttft_ms))
 
                 return LLMResponse(text=resp, model=m, model_name=model_name, provider=provider.name)
         except Exception as e:
@@ -200,10 +199,8 @@ async def stream_llm(
             input_tokens = estimate_tokens(str(data))
 
             async def _stream():
-                import time
-
                 accumulated_response: list[str] = []
-                start_time = time.perf_counter()
+                start_time = perf_counter()
                 first_token_time: float | None = None
 
                 async with client.stream("POST", url, json=data, timeout=timeout) as response:
@@ -211,7 +208,7 @@ async def stream_llm(
                     async for line in response.aiter_lines():
                         if chunk_data := await process_chunk_line(line):
                             if first_token_time is None:
-                                first_token_time = time.perf_counter()
+                                first_token_time = perf_counter()
                             accumulated_response.append(chunk_data)
                             yield chunk_data
 
@@ -219,8 +216,10 @@ async def stream_llm(
                 if accumulated_response:
                     full_response = "".join(accumulated_response)
                     output_tokens = estimate_tokens(full_response)
-                    total_time = time.perf_counter() - start_time
-                    ttft_ms = int((first_token_time - start_time) * 1000) if first_token_time else 0
+                    total_time = perf_counter() - start_time
+                    ttft_ms: int | None = None
+                    if first_token_time is not None:
+                        ttft_ms = max(0, int((first_token_time - start_time) * 1000))
 
                     logger.info(format_metrics(model_name, input_tokens, output_tokens, total_time, ttft_ms))
 
@@ -237,9 +236,19 @@ async def stream_llm(
 async def _process_stream_response(
     response: httpx.Response,
     stream_handler: StreamHandler | None,
-) -> str:
+    start_time: float,
+) -> tuple[str, int | None]:
+    first_token_time: float | None = None
     with ResponseDisplay(stream_handler) as display:
         async for line in response.aiter_lines():
             if delta := await process_chunk_line(line):
+                if first_token_time is None:
+                    first_token_time = perf_counter()
                 await display.update(delta)
-        return display.finalize()
+        final_response = display.finalize()
+
+    ttft_ms: int | None = None
+    if first_token_time is not None:
+        ttft_ms = max(0, int((first_token_time - start_time) * 1000))
+
+    return final_response, ttft_ms
