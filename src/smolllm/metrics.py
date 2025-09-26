@@ -38,4 +38,12 @@ def format_metrics(
 
 
 def _format_time(ms: float) -> str:
-    return f"{ms / 1000.0:.1f}s" if ms >= 1000 else f"{ms}ms"
+    if ms < 0:
+        raise ValueError("Duration cannot be negative")
+    if ms >= 1000:
+        return f"{ms / 1000.0:.1f}s"
+    if ms >= 100:
+        return f"{ms:.0f}ms"
+    if ms >= 10:
+        return f"{ms:.1f}ms"
+    return f"{ms:.2f}ms"
