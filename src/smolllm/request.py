@@ -76,7 +76,7 @@ def prepare_request_data(
 
     if provider_name == "anthropic":
         # [OpenAI SDK compatibility (beta) - Anthropic](https://docs.anthropic.com/en/api/openai-sdk)
-        url = f"{base_url.rstrip('/')}/v1"
+        url = f"{base_url.rstrip('/')}/v1/chat/completions"
     elif provider_name == "gemini":
         # [OpenAI compatibility | Gemini API](https://ai.google.dev/gemini-api/docs/openai)
         url = f"{base_url.rstrip('/')}/v1beta/openai/chat/completions"
