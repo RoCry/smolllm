@@ -73,7 +73,7 @@ async def _prepare_llm_call(
         model = os.getenv("SMOLLLM_MODEL")
     if not model:
         raise ValueError("Model string not found. Set SMOLLLM_MODEL environment variable or pass model parameter")
-    provider, model_name = parse_model_string(model)
+    provider, model_name = parse_model_string(model, base_url=base_url)
 
     base_url = base_url or _get_env_var(provider.name, "BASE_URL", provider.base_url)
     api_key = api_key or _get_env_var(provider.name, "API_KEY")

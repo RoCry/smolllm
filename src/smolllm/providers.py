@@ -34,7 +34,7 @@ PROVIDERS = generate_provider_map()
 # try parse provider and model name from model_str, e.g.
 # "gemini/gemini-2.0-flash" -> ("gemini", "gemini-2.0-flash")
 # "gemini" -> ("gemini", "gemini-2.0-flash") // /w default model for the provider
-def parse_model_string(model_str: str) -> tuple[Provider, str]:
+def parse_model_string(model_str: str, *, base_url: str | None = None) -> tuple[Provider, str]:
     model_name = None
 
     if "/" in model_str:
@@ -45,13 +45,16 @@ def parse_model_string(model_str: str) -> tuple[Provider, str]:
 
     provider = PROVIDERS.get(provider_name)
     if not provider:
-        # no predefined provider, try to get it from env
-        key = f"{provider_name.upper()}_BASE_URL"
-        base_url = os.getenv(key)
         if base_url:
             provider = Provider(name=provider_name, base_url=base_url)
         else:
-            raise ValueError(f"Unknown provider name={provider_name} and {key} is not set")
+            # no predefined provider, try to get it from env
+            key = f"{provider_name.upper()}_BASE_URL"
+            env_base_url = os.getenv(key)
+            if env_base_url:
+                provider = Provider(name=provider_name, base_url=env_base_url)
+            else:
+                raise ValueError(f"Unknown provider name={provider_name}. Pass base_url or set {key}.")
     model_name = model_name or provider.guess_default_model_name()
     if not model_name:
         raise ValueError(f"Model name not found for provider: {provider_name}")
