@@ -4,6 +4,8 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol, TypedDict, override
 
+ModelInput = str | Sequence[str] | set[str] | dict[str, float | int]
+
 
 @dataclass(slots=True)
 class LLMResponse:
@@ -47,7 +49,7 @@ class LLMFunction(Protocol):
         prompt: PromptType,
         *,
         system_prompt: str | None = ...,
-        model: str | Sequence[str] | None = ...,
+        model: ModelInput | None = ...,
         api_key: str | None = ...,
         base_url: str | None = ...,
         handler: StreamHandler | None = ...,
