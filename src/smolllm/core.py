@@ -66,17 +66,19 @@ def _create_selector(model: ModelInput | None) -> ModelSelector:
 
     # set -> random equal weights
     if isinstance(candidate, set):
-        if not candidate:
-            raise ValueError("Model set must contain at least one entry")
-        return RandomSelector(candidate)
+        sanitized = {m.strip() for m in candidate if m.strip()}
+        if not sanitized:
+            raise ValueError("Model set must contain at least one non-empty entry")
+        return RandomSelector(sanitized)
 
     # dict -> weighted random
     if isinstance(candidate, dict):
-        if not candidate:
-            raise ValueError("Model dict must contain at least one entry")
-        if any(w <= 0 for w in candidate.values()):
+        sanitized = {k.strip(): v for k, v in candidate.items() if k.strip()}
+        if not sanitized:
+            raise ValueError("Model dict must contain at least one non-empty entry")
+        if any(w <= 0 for w in sanitized.values()):
             raise ValueError("Model weights must be positive")
-        return RandomSelector(candidate)
+        return RandomSelector(sanitized)
 
     # str -> comma-separated sequential
     if isinstance(candidate, str):
