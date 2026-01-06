@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import random
+from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from time import perf_counter
 from typing import Literal
@@ -14,27 +16,80 @@ from .metrics import estimate_tokens, format_metrics
 from .providers import Provider, parse_model_string
 from .request import prepare_client_and_auth, prepare_request_data
 from .stream import process_chunk_line
-from .types import LLMResponse, PromptType, StreamHandler, StreamResponse
+from .types import LLMResponse, ModelInput, PromptType, StreamHandler, StreamResponse
 from .utils import strip_backticks
 
 
-def _parse_models(model: str | Sequence[str] | None) -> list[str]:
-    """Normalise model input into a list of concrete model identifiers."""
+class ModelSelector(ABC):
+    """Base class for model selection strategies."""
 
-    candidate: str | Sequence[str] | None = model if model is not None else os.getenv("SMOLLLM_MODEL")
+    @abstractmethod
+    def next_model(self) -> str | None:
+        """Return next model to try, or None if exhausted."""
+
+
+class SequentialSelector(ModelSelector):
+    """Tries models in order. Used for str and list[str]."""
+
+    def __init__(self, models: list[str]):
+        self._models = iter(models)
+
+    def next_model(self) -> str | None:
+        return next(self._models, None)
+
+
+class RandomSelector(ModelSelector):
+    """Random selection with optional weights. Used for set and dict."""
+
+    def __init__(self, models: set[str] | dict[str, float | int]):
+        if isinstance(models, set):
+            self._weights = {m: 1.0 for m in models}
+        else:
+            self._weights = dict(models)
+        self._remaining = set(self._weights.keys())
+
+    def next_model(self) -> str | None:
+        if not self._remaining:
+            return None
+        models = list(self._remaining)
+        weights = [self._weights[m] for m in models]
+        chosen = random.choices(models, weights=weights, k=1)[0]
+        self._remaining.remove(chosen)
+        return chosen
+
+
+def _create_selector(model: ModelInput | None) -> ModelSelector:
+    """Create appropriate model selector based on input type."""
+    candidate: ModelInput | None = model if model is not None else os.getenv("SMOLLLM_MODEL")
     if candidate is None:
         raise ValueError("Model string not found. Set SMOLLLM_MODEL environment variable or pass model parameter")
 
+    # set -> random equal weights
+    if isinstance(candidate, set):
+        if not candidate:
+            raise ValueError("Model set must contain at least one entry")
+        return RandomSelector(candidate)
+
+    # dict -> weighted random
+    if isinstance(candidate, dict):
+        if not candidate:
+            raise ValueError("Model dict must contain at least one entry")
+        if any(w <= 0 for w in candidate.values()):
+            raise ValueError("Model weights must be positive")
+        return RandomSelector(candidate)
+
+    # str -> comma-separated sequential
     if isinstance(candidate, str):
         models = [m.strip() for m in candidate.split(",") if m.strip()]
         if not models:
             raise ValueError("Model string must contain at least one non-empty entry")
-        return models
+        return SequentialSelector(models)
 
+    # Sequence -> sequential
     models = [item.strip() for item in candidate]
     if not models or any(not item for item in models):
         raise ValueError("Model sequence entries must be non-empty strings")
-    return models
+    return SequentialSelector(models)
 
 
 def _get_env_var(
@@ -103,7 +158,7 @@ async def ask_llm(
     prompt: PromptType,
     *,
     system_prompt: str | None = None,
-    model: str | Sequence[str] | None = None,
+    model: ModelInput | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
     handler: StreamHandler | None = None,
@@ -114,7 +169,7 @@ async def ask_llm(
     """
     Args:
         model: provider/model_name (e.g., "openai/gpt-4" or "gemini"), fallback to SMOLLLM_MODEL
-              Can also specify multiple models as comma-separated list (e.g., "gemini/gemini-2.0-flash,gemini/gemini-2.5-pro")
+              Can be: str, list[str] (fallback order), set[str] (random), dict[str, weight] (weighted random)
         api_key: Optional API key, fallback to ${PROVIDER}_API_KEY
         base_url: Custom base URL for API endpoint, fallback to ${PROVIDER}_BASE_URL
         handler: Optional callback for handling streaming responses
@@ -124,8 +179,9 @@ async def ask_llm(
     Returns:
         LLMResponse object containing the text response, model used, and provider
     """
+    selector = _create_selector(model)
     last_error: Exception | None = None
-    for m in _parse_models(model):
+    while (m := selector.next_model()) is not None:
         try:
             url, data, client, provider, model_name = await _prepare_llm_call(
                 prompt,
@@ -166,7 +222,7 @@ async def stream_llm(
     prompt: PromptType,
     *,
     system_prompt: str | None = None,
-    model: str | Sequence[str] | None = None,
+    model: ModelInput | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
     timeout: float = 120.0,
@@ -176,7 +232,7 @@ async def stream_llm(
 
     Args:
         model: provider/model_name (e.g., "openai/gpt-4" or "gemini"), fallback to SMOLLLM_MODEL
-              Can also specify multiple models as comma-separated list (e.g., "gemini/gemini-2.0-flash,gemini/gemini-2.5-pro")
+              Can be: str, list[str] (fallback order), set[str] (random), dict[str, weight] (weighted random)
         api_key: Optional API key, fallback to ${PROVIDER}_API_KEY
         base_url: Custom base URL for API endpoint, fallback to ${PROVIDER}_BASE_URL
         image_paths: Optional list of image paths to include with the prompt
@@ -184,8 +240,9 @@ async def stream_llm(
     Returns:
         StreamResponse object with stream iterator and model information
     """
+    selector = _create_selector(model)
     last_error: Exception | None = None
-    for m in _parse_models(model):
+    while (m := selector.next_model()) is not None:
         try:
             url, data, client, provider, model_name = await _prepare_llm_call(
                 prompt,
