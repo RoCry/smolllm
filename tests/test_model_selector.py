@@ -118,3 +118,21 @@ class TestCreateSelector:
     def test_zero_weight_raises(self):
         with pytest.raises(ValueError, match="positive"):
             _create_selector({"a": 0})
+
+    def test_set_strips_whitespace(self):
+        selector = _create_selector({"  a  ", "b"})
+        results = {selector.next_model(), selector.next_model()}
+        assert results == {"a", "b"}
+
+    def test_set_whitespace_only_raises(self):
+        with pytest.raises(ValueError, match="non-empty"):
+            _create_selector({"  ", ""})
+
+    def test_dict_strips_whitespace(self):
+        selector = _create_selector({"  a  ": 1, "b": 2})
+        results = {selector.next_model(), selector.next_model()}
+        assert results == {"a", "b"}
+
+    def test_dict_whitespace_only_raises(self):
+        with pytest.raises(ValueError, match="non-empty"):
+            _create_selector({"  ": 1, "": 2})
