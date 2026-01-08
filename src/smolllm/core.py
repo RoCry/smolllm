@@ -241,23 +241,34 @@ async def stream_llm(
 
     Returns:
         StreamResponse object with stream iterator and model information
+
+    Note:
+        If streaming fails mid-way (rate limit, connection drop), automatically
+        retries with fallback models. Already-yielded chunks are discarded on retry.
     """
     selector = _create_selector(model)
-    last_error: Exception | None = None
-    while (m := selector.next_model()) is not None:
-        try:
-            url, data, client, provider, model_name = await _prepare_llm_call(
-                prompt,
-                system_prompt=system_prompt,
-                model=m,
-                api_key=api_key,
-                base_url=base_url,
-                image_paths=image_paths,
-            )
 
-            input_tokens = estimate_tokens(str(data))
+    # Track which model succeeded for the response metadata
+    successful_model: list[str | None] = [None]
+    successful_model_name: list[str | None] = [None]
+    successful_provider: list[str | None] = [None]
 
-            async def _stream():
+    async def _stream_with_fallback():
+        nonlocal selector
+        last_error: Exception | None = None
+
+        while (m := selector.next_model()) is not None:
+            try:
+                url, data, client, provider, model_name = await _prepare_llm_call(
+                    prompt,
+                    system_prompt=system_prompt,
+                    model=m,
+                    api_key=api_key,
+                    base_url=base_url,
+                    image_paths=image_paths,
+                )
+
+                input_tokens = estimate_tokens(str(data))
                 accumulated_response: list[str] = []
                 start_time = perf_counter()
                 first_token_time: float | None = None
@@ -271,7 +282,7 @@ async def stream_llm(
                             accumulated_response.append(chunk_data)
                             yield chunk_data
 
-                # Log metrics after streaming completes
+                # Success - log metrics and record model info
                 if accumulated_response:
                     full_response = "".join(accumulated_response)
                     output_tokens = estimate_tokens(full_response)
@@ -279,17 +290,29 @@ async def stream_llm(
                     ttft_ms: int | None = None
                     if first_token_time is not None:
                         ttft_ms = max(0, int((first_token_time - start_time) * 1000))
-
                     logger.info(format_metrics(model_name, input_tokens, output_tokens, total_time, ttft_ms))
 
-            return StreamResponse(stream=_stream(), model=m, model_name=model_name, provider=provider.name)
-        except Exception as e:
-            last_error = e
-            logger.warning(f"Failed to stream from model {m}: {e}")
-            continue
-    if last_error:
-        raise last_error
-    raise ValueError("No valid models found")
+                successful_model[0] = m
+                successful_model_name[0] = model_name
+                successful_provider[0] = provider.name
+                return  # Stream completed successfully
+
+            except Exception as e:
+                last_error = e
+                logger.warning(f"Stream failed for model {m}, trying fallback: {e}")
+                continue
+
+        # All models exhausted
+        if last_error:
+            raise last_error
+        raise ValueError("No valid models found")
+
+    return StreamResponse(
+        stream=_stream_with_fallback(),
+        model=successful_model[0] or "unknown",
+        model_name=successful_model_name[0] or "unknown",
+        provider=successful_provider[0],
+    )
 
 
 async def _process_stream_response(
