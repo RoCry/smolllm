@@ -7,6 +7,14 @@ from typing import Literal, Protocol, TypedDict, override
 ModelInput = str | Sequence[str] | set[str] | dict[str, float | int]
 
 
+class StreamError(RuntimeError):
+    """Raised when a streaming response fails mid-flight."""
+
+    def __init__(self, message: str, *, partial: str | None = None) -> None:
+        self.partial = partial
+        super().__init__(message)
+
+
 @dataclass(slots=True)
 class LLMResponse:
     """High-level response container with provider metadata."""

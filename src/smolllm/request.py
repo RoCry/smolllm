@@ -31,6 +31,7 @@ def _prepare_openai_request(
     system_prompt: str | None,
     model_name: str,
     image_paths: Sequence[str],
+    stream: bool,
 ) -> dict[str, object]:
     messages: list[Message] = []
     if system_prompt:
@@ -59,7 +60,7 @@ def _prepare_openai_request(
     return {
         "messages": messages,
         "model": model_name,
-        "stream": True,
+        "stream": stream,
     }
 
 
@@ -70,6 +71,7 @@ def prepare_request_data(
     provider_name: str,
     base_url: str,
     image_paths: Sequence[str] | None = None,
+    stream: bool = True,
 ) -> tuple[str, dict[str, object]]:
     """Prepare request URL, data and headers for the API call"""
     image_path_list = list(image_paths) if image_paths else []
@@ -88,7 +90,7 @@ def prepare_request_data(
             url = f"{base_url}chat/completions"
         else:
             url = f"{base_url}/v1/chat/completions"
-    data = _prepare_openai_request(prompt, system_prompt, model_name, image_path_list)
+    data = _prepare_openai_request(prompt, system_prompt, model_name, image_path_list, stream)
 
     return url, data
 

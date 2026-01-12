@@ -10,6 +10,7 @@ from .types import (
     MessageRole,
     ModelInput,
     PromptType,
+    StreamError,
     StreamHandler,
     StreamResponse,
 )
@@ -26,4 +27,5 @@ __all__ = [
     "MessageRole",
     "LLMResponse",
     "StreamResponse",
+    "StreamError",
 ]

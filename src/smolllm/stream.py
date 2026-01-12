@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from typing import cast
 
 from .log import logger
+from .types import StreamError
 
 
 def _handle_chunk(chunk: Mapping[str, object]) -> str | None:
@@ -44,6 +45,13 @@ async def process_chunk_line(line: str) -> str | None:
             if not isinstance(key_obj, str):
                 raise TypeError("Streaming chunk keys must be strings")
             chunk[key_obj] = value
+        if "error" in chunk:
+            error_obj = chunk.get("error")
+            if isinstance(error_obj, Mapping):
+                message = error_obj.get("message")
+                if isinstance(message, str) and message.strip():
+                    raise StreamError(message.strip())
+            raise StreamError("Stream error")
         return _handle_chunk(chunk)
     except json.JSONDecodeError as exc:
         message = f"Malformed streaming chunk: {payload}"

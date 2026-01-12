@@ -16,7 +16,7 @@ from .metrics import estimate_tokens, format_metrics
 from .providers import Provider, parse_model_string
 from .request import prepare_client_and_auth, prepare_request_data
 from .stream import process_chunk_line
-from .types import LLMResponse, ModelInput, PromptType, StreamHandler, StreamResponse
+from .types import LLMResponse, ModelInput, PromptType, StreamError, StreamHandler, StreamResponse
 from .utils import strip_backticks
 
 
@@ -120,6 +120,7 @@ async def _prepare_llm_call(
     api_key: str | None = None,
     base_url: str | None = None,
     image_paths: Sequence[str] | None = None,
+    stream: bool = True,
 ) -> tuple[str, dict[str, object], httpx.AsyncClient, Provider, str]:
     """Common setup logic for LLM API calls
 
@@ -137,7 +138,15 @@ async def _prepare_llm_call(
 
     api_key, base_url = balancer.choose_pair(api_key, base_url)
     image_list = list(image_paths) if image_paths else None
-    url, data = prepare_request_data(prompt, system_prompt, model_name, provider.name, base_url, image_list)
+    url, data = prepare_request_data(
+        prompt,
+        system_prompt,
+        model_name,
+        provider.name,
+        base_url,
+        image_list,
+        stream=stream,
+    )
     client = prepare_client_and_auth(url, api_key)
 
     api_key_preview = api_key[:5] + "..." + api_key[-4:]
@@ -156,6 +165,36 @@ async def _handle_http_error(response: httpx.Response) -> None:
         )
 
 
+def _extract_text_from_response(payload: object) -> str:
+    if not isinstance(payload, dict):
+        raise TypeError("Response payload must be a mapping")
+
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise ValueError("Response payload missing choices")
+    first = choices[0]
+    if not isinstance(first, dict):
+        raise TypeError("Response choice must be a mapping")
+
+    message = first.get("message")
+    if isinstance(message, dict):
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+
+    delta = first.get("delta")
+    if isinstance(delta, dict):
+        content = delta.get("content")
+        if isinstance(content, str):
+            return content
+
+    text = first.get("text")
+    if isinstance(text, str):
+        return text
+
+    raise ValueError("Response choice missing content")
+
+
 async def ask_llm(
     prompt: PromptType,
     *,
@@ -167,6 +206,7 @@ async def ask_llm(
     timeout: float = 120.0,
     remove_backticks: bool = False,
     image_paths: Sequence[str] | None = None,
+    stream: bool = True,
 ) -> LLMResponse:
     """
     Args:
@@ -177,6 +217,7 @@ async def ask_llm(
         handler: Optional callback for handling streaming responses
         remove_backticks: Whether to remove backticks from the response, e.g. ```markdown\nblabla\n``` -> blabla
         image_paths: Optional list of image paths to include with the prompt
+        stream: Whether to request a streaming response
 
     Returns:
         LLMResponse object containing the text response, model used, and provider
@@ -192,25 +233,38 @@ async def ask_llm(
                 api_key=api_key,
                 base_url=base_url,
                 image_paths=image_paths,
+                stream=stream,
             )
 
             input_tokens = estimate_tokens(str(data))
             start_time = perf_counter()
+            ttft_ms: int | None = None
 
-            async with client.stream("POST", url, json=data, timeout=timeout) as response:
-                await _handle_http_error(response)
-                resp, ttft_ms = await _process_stream_response(response, handler, start_time)
-                if not resp:
-                    raise ValueError(f"Received empty response from model {m}")
-                if remove_backticks:
-                    resp = strip_backticks(resp)
+            async with client:
+                if stream:
+                    async with client.stream("POST", url, json=data, timeout=timeout) as response:
+                        await _handle_http_error(response)
+                        resp, ttft_ms = await _process_stream_response(response, handler, start_time)
+                else:
+                    response = await client.post(url, json=data, timeout=timeout)
+                    await _handle_http_error(response)
+                    await response.aread()
+                    payload = response.json()
+                    resp = _extract_text_from_response(payload)
+                    if handler is not None:
+                        await handler(resp)
 
-                total_time = perf_counter() - start_time
-                output_tokens = estimate_tokens(resp)
+            if not resp:
+                raise ValueError(f"Received empty response from model {m}")
+            if remove_backticks:
+                resp = strip_backticks(resp)
 
-                logger.info(format_metrics(model_name, input_tokens, output_tokens, total_time, ttft_ms))
+            total_time = perf_counter() - start_time
+            output_tokens = estimate_tokens(resp)
 
-                return LLMResponse(text=resp, model=m, model_name=model_name, provider=provider.name)
+            logger.info(format_metrics(model_name, input_tokens, output_tokens, total_time, ttft_ms))
+
+            return LLMResponse(text=resp, model=m, model_name=model_name, provider=provider.name)
         except Exception as e:
             last_error = e
             logger.warning(f"Failed to get response from model {m}: {e}")
@@ -243,8 +297,8 @@ async def stream_llm(
         StreamResponse object with stream iterator and model information
 
     Note:
-        If streaming fails mid-way (rate limit, connection drop), automatically
-        retries with fallback models. Already-yielded chunks are discarded on retry.
+        If streaming fails mid-way, retries with fallback models. Already-yielded
+        chunks cannot be retracted; callers should handle partial output.
     """
     selector = _create_selector(model)
 
@@ -258,6 +312,7 @@ async def stream_llm(
         last_error: Exception | None = None
 
         while (m := selector.next_model()) is not None:
+            accumulated_response: list[str] = []
             try:
                 url, data, client, provider, model_name = await _prepare_llm_call(
                     prompt,
@@ -269,18 +324,26 @@ async def stream_llm(
                 )
 
                 input_tokens = estimate_tokens(str(data))
-                accumulated_response: list[str] = []
                 start_time = perf_counter()
                 first_token_time: float | None = None
 
-                async with client.stream("POST", url, json=data, timeout=timeout) as response:
-                    await _handle_http_error(response)
-                    async for line in response.aiter_lines():
-                        if chunk_data := await process_chunk_line(line):
-                            if first_token_time is None:
-                                first_token_time = perf_counter()
-                            accumulated_response.append(chunk_data)
-                            yield chunk_data
+                try:
+                    async with client:
+                        async with client.stream("POST", url, json=data, timeout=timeout) as response:
+                            await _handle_http_error(response)
+                            async for line in response.aiter_lines():
+                                if chunk_data := await process_chunk_line(line):
+                                    if first_token_time is None:
+                                        first_token_time = perf_counter()
+                                    accumulated_response.append(chunk_data)
+                                    yield chunk_data
+                except Exception as e:
+                    if accumulated_response:
+                        raise StreamError(
+                            "Stream interrupted",
+                            partial="".join(accumulated_response),
+                        ) from e
+                    raise
 
                 # Success - log metrics and record model info
                 if accumulated_response:
@@ -291,6 +354,8 @@ async def stream_llm(
                     if first_token_time is not None:
                         ttft_ms = max(0, int((first_token_time - start_time) * 1000))
                     logger.info(format_metrics(model_name, input_tokens, output_tokens, total_time, ttft_ms))
+                else:
+                    raise StreamError("Stream completed without content")
 
                 successful_model[0] = m
                 successful_model_name[0] = model_name
@@ -298,6 +363,10 @@ async def stream_llm(
                 return  # Stream completed successfully
 
             except Exception as e:
+                if isinstance(e, StreamError) and e.partial:
+                    last_error = e
+                    logger.warning(f"Stream failed for model {m}, not retrying (partial output): {e}")
+                    raise
                 last_error = e
                 logger.warning(f"Stream failed for model {m}, trying fallback: {e}")
                 continue
