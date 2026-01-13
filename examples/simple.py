@@ -7,7 +7,7 @@ from smolllm import LLMResponse, ask_llm
 _ = load_dotenv()
 
 
-async def main(prompt: str = "Say hello world in a creative way") -> None:
+async def main(prompt: str = "Hello") -> None:
     response: LLMResponse = await ask_llm(prompt)
     print(response)
 
