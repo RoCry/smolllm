@@ -1,4 +1,5 @@
 import asyncio
+import sys
 
 from dotenv import load_dotenv
 
@@ -7,7 +8,8 @@ from smolllm import LLMResponse, ask_llm
 _ = load_dotenv()
 
 
-async def main(prompt: str = "Hello") -> None:
+async def main() -> None:
+    prompt = sys.argv[1] if len(sys.argv) > 1 else "Hello"
     response: LLMResponse = await ask_llm(prompt)
     print(response)
 
