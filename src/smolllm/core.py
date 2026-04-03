@@ -17,7 +17,7 @@ from .providers import Provider, parse_model_string
 from .request import prepare_client_and_auth, prepare_request_data
 from .stream import process_chunk_line
 from .types import LLMResponse, ModelInput, PromptType, StreamError, StreamHandler, StreamResponse
-from .utils import strip_backticks
+from .utils import ThinkTagFilter, extract_think_tags, strip_backticks
 
 
 class ModelSelector(ABC):
@@ -165,7 +165,11 @@ async def _handle_http_error(response: httpx.Response) -> None:
         )
 
 
-def _extract_text_from_response(payload: object) -> str:
+def _extract_text_from_response(payload: object) -> tuple[str, str]:
+    """Extract text and reasoning from a non-streaming response.
+
+    Returns (text, reasoning).
+    """
     if not isinstance(payload, dict):
         raise TypeError("Response payload must be a mapping")
 
@@ -176,23 +180,44 @@ def _extract_text_from_response(payload: object) -> str:
     if not isinstance(first, dict):
         raise TypeError("Response choice must be a mapping")
 
+    reasoning = ""
+    content: str | None = None
+
     message = first.get("message")
     if isinstance(message, dict):
-        content = message.get("content")
-        if isinstance(content, str):
-            return content
+        rc = message.get("reasoning_content")
+        if isinstance(rc, str):
+            reasoning = rc
+        c = message.get("content")
+        if isinstance(c, str):
+            content = c
 
-    delta = first.get("delta")
-    if isinstance(delta, dict):
-        content = delta.get("content")
-        if isinstance(content, str):
-            return content
+    if content is None:
+        delta = first.get("delta")
+        if isinstance(delta, dict):
+            rc = delta.get("reasoning_content")
+            if isinstance(rc, str) and not reasoning:
+                reasoning = rc
+            c = delta.get("content")
+            if isinstance(c, str):
+                content = c
 
-    text = first.get("text")
-    if isinstance(text, str):
-        return text
+    if content is None:
+        text = first.get("text")
+        if isinstance(text, str):
+            content = text
 
-    raise ValueError("Response choice missing content")
+    if content is None:
+        raise ValueError("Response choice missing content")
+
+    # Fall back to extracting <think> tags if backend didn't provide reasoning_content
+    if not reasoning and content:
+        extracted_reasoning, clean_content = extract_think_tags(content)
+        if extracted_reasoning:
+            reasoning = extracted_reasoning
+            content = clean_content
+
+    return content, reasoning
 
 
 async def ask_llm(
@@ -240,31 +265,34 @@ async def ask_llm(
             start_time = perf_counter()
             ttft_ms: int | None = None
 
+            reasoning = ""
             async with client:
                 if stream:
                     async with client.stream("POST", url, json=data, timeout=timeout) as response:
                         await _handle_http_error(response)
-                        resp, ttft_ms = await _process_stream_response(response, handler, start_time)
+                        resp, reasoning, ttft_ms = await _process_stream_response(response, handler, start_time)
                 else:
                     response = await client.post(url, json=data, timeout=timeout)
                     await _handle_http_error(response)
                     await response.aread()
                     payload = response.json()
-                    resp = _extract_text_from_response(payload)
+                    resp, reasoning = _extract_text_from_response(payload)
                     if handler is not None:
-                        await handler(resp)
+                        from .types import StreamChunk
 
-            if not resp:
+                        await handler(StreamChunk(content=resp, reasoning=reasoning))
+
+            if not resp and not reasoning:
                 raise ValueError(f"Received empty response from model {m}")
             if remove_backticks:
                 resp = strip_backticks(resp)
 
             total_time = perf_counter() - start_time
-            output_tokens = estimate_tokens(resp)
+            output_tokens = estimate_tokens(resp + reasoning)
 
             logger.info(format_metrics(model_name, input_tokens, output_tokens, total_time, ttft_ms))
 
-            return LLMResponse(text=resp, model=m, model_name=model_name, provider=provider.name)
+            return LLMResponse(text=resp, model=m, model_name=model_name, provider=provider.name, reasoning=reasoning)
         except Exception as e:
             last_error = e
             logger.warning(f"Failed to get response from model {m}: {e}")
@@ -312,7 +340,8 @@ async def stream_llm(
         last_error: Exception | None = None
 
         while (m := selector.next_model()) is not None:
-            accumulated_response: list[str] = []
+            accumulated_content: list[str] = []
+            accumulated_reasoning: list[str] = []
             try:
                 url, data, client, provider, model_name = await _prepare_llm_call(
                     prompt,
@@ -326,28 +355,41 @@ async def stream_llm(
                 input_tokens = estimate_tokens(str(data))
                 start_time = perf_counter()
                 first_token_time: float | None = None
+                think_filter = ThinkTagFilter()
 
                 try:
                     async with client:
                         async with client.stream("POST", url, json=data, timeout=timeout) as response:
                             await _handle_http_error(response)
                             async for line in response.aiter_lines():
-                                if chunk_data := await process_chunk_line(line):
-                                    if first_token_time is None:
-                                        first_token_time = perf_counter()
-                                    accumulated_response.append(chunk_data)
-                                    yield chunk_data
+                                if chunk := await process_chunk_line(line):
+                                    chunk = think_filter.feed(chunk)
+                                    if chunk:
+                                        if first_token_time is None:
+                                            first_token_time = perf_counter()
+                                        if chunk.content:
+                                            accumulated_content.append(chunk.content)
+                                        if chunk.reasoning:
+                                            accumulated_reasoning.append(chunk.reasoning)
+                                        yield chunk
+                            # Flush any buffered content
+                            if final_chunk := think_filter.flush():
+                                if final_chunk.content:
+                                    accumulated_content.append(final_chunk.content)
+                                if final_chunk.reasoning:
+                                    accumulated_reasoning.append(final_chunk.reasoning)
+                                yield final_chunk
                 except Exception as e:
-                    if accumulated_response:
+                    if accumulated_content or accumulated_reasoning:
                         raise StreamError(
                             "Stream interrupted",
-                            partial="".join(accumulated_response),
+                            partial="".join(accumulated_content),
                         ) from e
                     raise
 
                 # Success - log metrics and record model info
-                if accumulated_response:
-                    full_response = "".join(accumulated_response)
+                if accumulated_content or accumulated_reasoning:
+                    full_response = "".join(accumulated_content) + "".join(accumulated_reasoning)
                     output_tokens = estimate_tokens(full_response)
                     total_time = perf_counter() - start_time
                     ttft_ms: int | None = None
@@ -388,18 +430,25 @@ async def _process_stream_response(
     response: httpx.Response,
     stream_handler: StreamHandler | None,
     start_time: float,
-) -> tuple[str, int | None]:
+) -> tuple[str, str, int | None]:
+    """Returns (text, reasoning, ttft_ms)."""
     first_token_time: float | None = None
+    think_filter = ThinkTagFilter()
     with ResponseDisplay(stream_handler) as display:
         async for line in response.aiter_lines():
-            if delta := await process_chunk_line(line):
-                if first_token_time is None:
-                    first_token_time = perf_counter()
-                await display.update(delta)
-        final_response = display.finalize()
+            if chunk := await process_chunk_line(line):
+                chunk = think_filter.feed(chunk)
+                if chunk:
+                    if first_token_time is None:
+                        first_token_time = perf_counter()
+                    await display.update(chunk)
+        # Flush any buffered content from the think tag filter
+        if final_chunk := think_filter.flush():
+            await display.update(final_chunk)
+        text, reasoning = display.finalize()
 
     ttft_ms: int | None = None
     if first_token_time is not None:
         ttft_ms = max(0, int((first_token_time - start_time) * 1000))
 
-    return final_response, ttft_ms
+    return text, reasoning, ttft_ms

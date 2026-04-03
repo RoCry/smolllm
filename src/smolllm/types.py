@@ -16,6 +16,21 @@ class StreamError(RuntimeError):
 
 
 @dataclass(slots=True)
+class StreamChunk:
+    """A single chunk from a streaming response, separating content and reasoning."""
+
+    content: str = ""
+    reasoning: str = ""
+
+    @override
+    def __str__(self) -> str:
+        return self.reasoning + self.content
+
+    def __bool__(self) -> bool:
+        return bool(self.content or self.reasoning)
+
+
+@dataclass(slots=True)
 class LLMResponse:
     """High-level response container with provider metadata."""
 
@@ -23,6 +38,7 @@ class LLMResponse:
     model: str  # e.g. "gemini/gemini-2.0-flash"
     model_name: str  # e.g. "gemini-2.0-flash"
     provider: str | None = None
+    reasoning: str = ""
 
     @override
     def __str__(self) -> str:
@@ -36,19 +52,19 @@ class LLMResponse:
 class StreamResponse:
     """Wrapper for streaming responses with model metadata."""
 
-    stream: AsyncIterator[str]
+    stream: AsyncIterator[StreamChunk]
     model: str  # e.g. "openrouter/google/gemini-2.5-flash"
     model_name: str  # e.g. "gemini-2.5-flash"
     provider: str | None = None
 
-    def __aiter__(self) -> AsyncIterator[str]:
+    def __aiter__(self) -> AsyncIterator[StreamChunk]:
         return self.stream
 
-    async def __anext__(self) -> str:
+    async def __anext__(self) -> StreamChunk:
         return await self.stream.__anext__()
 
 
-StreamHandler = Callable[[str], Awaitable[None]]
+StreamHandler = Callable[[StreamChunk], Awaitable[None]]
 
 
 class LLMFunction(Protocol):

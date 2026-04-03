@@ -5,10 +5,10 @@ from collections.abc import Mapping
 from typing import cast
 
 from .log import logger
-from .types import StreamError
+from .types import StreamChunk, StreamError
 
 
-def _handle_chunk(chunk: Mapping[str, object]) -> str | None:
+def _handle_chunk(chunk: Mapping[str, object]) -> StreamChunk | None:
     choices = chunk.get("choices")
     if not isinstance(choices, list) or not choices:
         return None
@@ -21,16 +21,24 @@ def _handle_chunk(chunk: Mapping[str, object]) -> str | None:
     if not isinstance(delta_candidate, Mapping):
         raise TypeError("Chunk delta must be a mapping")
     delta = cast(Mapping[str, object], delta_candidate)
+
+    content = ""
     content_candidate = delta.get("content")
-    if content_candidate is None:
+    if isinstance(content_candidate, str):
+        content = content_candidate
+
+    reasoning = ""
+    reasoning_candidate = delta.get("reasoning_content")
+    if isinstance(reasoning_candidate, str):
+        reasoning = reasoning_candidate
+
+    if not content and not reasoning:
         return None
-    if not isinstance(content_candidate, str):
-        raise TypeError("Chunk content must be a string")
-    return content_candidate
+    return StreamChunk(content=content, reasoning=reasoning)
 
 
-async def process_chunk_line(line: str) -> str | None:
-    """Process a single chunk of data from the stream"""
+async def process_chunk_line(line: str) -> StreamChunk | None:
+    """Process a single chunk of data from the stream, returning a StreamChunk or None."""
     line = line.strip()
     if not line or line == "data: [DONE]" or not line.startswith("data: "):
         return None
