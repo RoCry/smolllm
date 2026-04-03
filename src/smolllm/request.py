@@ -2,11 +2,17 @@ from __future__ import annotations
 
 import base64
 import mimetypes
+import re
 from collections.abc import Sequence
 
 import httpx
 
 from .types import Message, PromptType
+
+
+def _has_version_suffix(url: str) -> bool:
+    """Check if URL already ends with a version path like /v1, /v2, etc."""
+    return bool(re.search(r"/v\d+$", url.rstrip("/")))
 
 
 def _guess_mime_type(image_path: str) -> str:
@@ -75,19 +81,24 @@ def prepare_request_data(
 ) -> tuple[str, dict[str, object]]:
     """Prepare request URL, data and headers for the API call"""
     image_path_list = list(image_paths) if image_paths else []
+    versioned = _has_version_suffix(base_url)
 
     if provider_name == "anthropic":
         # [OpenAI SDK compatibility (beta) - Anthropic](https://docs.anthropic.com/en/api/openai-sdk)
-        url = f"{base_url.rstrip('/')}/v1/chat/completions"
+        stripped = base_url.rstrip("/")
+        url = f"{stripped}/chat/completions" if versioned else f"{stripped}/v1/chat/completions"
     elif provider_name == "gemini":
-        # [OpenAI compatibility | Gemini API](https://ai.google.dev/gemini-api/docs/openai)
-        url = f"{base_url.rstrip('/')}/v1beta/openai/chat/completions"
+        # [OpenAI compatibility | Gemini API](https://ai.google.dev/gemini-api/docs/openai)
+        stripped = base_url.rstrip("/")
+        url = f"{stripped}/chat/completions" if versioned else f"{stripped}/v1beta/openai/chat/completions"
     else:
         # Handle URL based on suffix
         if base_url.endswith("#"):
             url = base_url[:-1]
         elif base_url.endswith("/"):
             url = f"{base_url}chat/completions"
+        elif versioned:
+            url = f"{base_url}/chat/completions"
         else:
             url = f"{base_url}/v1/chat/completions"
     data = _prepare_openai_request(prompt, system_prompt, model_name, image_path_list, stream)
