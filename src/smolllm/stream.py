@@ -28,9 +28,12 @@ def _handle_chunk(chunk: Mapping[str, object]) -> StreamChunk | None:
         content = content_candidate
 
     reasoning = ""
-    reasoning_candidate = delta.get("reasoning_content")
-    if isinstance(reasoning_candidate, str):
-        reasoning = reasoning_candidate
+    # "reasoning_content" (DeepSeek, vLLM, LiteLLM) or "reasoning" (Ollama)
+    for key in ("reasoning_content", "reasoning"):
+        reasoning_candidate = delta.get(key)
+        if isinstance(reasoning_candidate, str) and reasoning_candidate:
+            reasoning = reasoning_candidate
+            break
 
     if not content and not reasoning:
         return None

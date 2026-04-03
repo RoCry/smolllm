@@ -183,22 +183,19 @@ def _extract_text_from_response(payload: object) -> tuple[str, str]:
     reasoning = ""
     content: str | None = None
 
-    message = first.get("message")
-    if isinstance(message, dict):
-        rc = message.get("reasoning_content")
-        if isinstance(rc, str):
-            reasoning = rc
-        c = message.get("content")
-        if isinstance(c, str):
-            content = c
-
-    if content is None:
-        delta = first.get("delta")
-        if isinstance(delta, dict):
-            rc = delta.get("reasoning_content")
-            if isinstance(rc, str) and not reasoning:
-                reasoning = rc
-            c = delta.get("content")
+    for container_key in ("message", "delta"):
+        container = first.get(container_key)
+        if not isinstance(container, dict):
+            continue
+        # "reasoning_content" (DeepSeek, vLLM, LiteLLM) or "reasoning" (Ollama)
+        if not reasoning:
+            for rk in ("reasoning_content", "reasoning"):
+                rc = container.get(rk)
+                if isinstance(rc, str) and rc:
+                    reasoning = rc
+                    break
+        if content is None:
+            c = container.get("content")
             if isinstance(c, str):
                 content = c
 
