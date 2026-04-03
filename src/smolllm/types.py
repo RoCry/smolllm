@@ -17,13 +17,19 @@ class StreamError(RuntimeError):
 
 @dataclass(slots=True)
 class StreamChunk:
-    """A single chunk from a streaming response, separating content and reasoning."""
+    """A single chunk from a streaming response, separating content and reasoning.
+
+    Note: ``str(chunk)`` returns only ``.content`` — reasoning must be read
+    via ``.reasoning`` explicitly.  This keeps ``print(chunk, end="")``
+    backward-compatible with code that expects plain answer text.
+    """
 
     content: str = ""
     reasoning: str = ""
 
     @override
     def __str__(self) -> str:
+        # Only content — reasoning is opt-in via .reasoning
         return self.content
 
     def __bool__(self) -> bool:
@@ -50,18 +56,41 @@ class LLMResponse:
 
 @dataclass(slots=True)
 class StreamResponse:
-    """Wrapper for streaming responses with model metadata."""
+    """Wrapper for streaming responses with model metadata.
+
+    Yields ``StreamChunk`` objects during iteration.  After the stream
+    completes, accumulated ``reasoning`` is available on this object
+    (mirrors ``LLMResponse.reasoning``).
+    """
 
     stream: AsyncIterator[StreamChunk]
     model: str  # e.g. "openrouter/google/gemini-2.5-flash"
     model_name: str  # e.g. "gemini-2.5-flash"
     provider: str | None = None
+    reasoning: str = ""
 
     def __aiter__(self) -> AsyncIterator[StreamChunk]:
-        return self.stream
+        return self
 
     async def __anext__(self) -> StreamChunk:
-        return await self.stream.__anext__()
+        chunk = await self.stream.__anext__()
+        if chunk.reasoning:
+            self.reasoning += chunk.reasoning
+        return chunk
+
+    async def display(self, handler: StreamHandler | None = None) -> str:
+        """Consume the stream with rich terminal display (like ask_llm).
+
+        Returns the final response text. Reasoning is accumulated on
+        ``self.reasoning``.
+        """
+        from .display import ResponseDisplay
+
+        with ResponseDisplay(handler) as disp:
+            async for chunk in self:
+                await disp.update(chunk)
+            text, _ = disp.finalize()
+        return text
 
 
 StreamHandler = Callable[[StreamChunk], Awaitable[None]]

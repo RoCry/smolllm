@@ -15,20 +15,8 @@ prompt: list[Message] = [
 
 async def main():
     response = await stream_llm(prompt)
-    reasoning_started = False
-    content_started = False
-    async for chunk in response:
-        if chunk.reasoning:
-            if not reasoning_started:
-                print("[Reasoning]", flush=True)
-                reasoning_started = True
-            print(chunk.reasoning, end="", flush=True)
-        if chunk.content:
-            if reasoning_started and not content_started:
-                print("\n\n[Answer]", flush=True)
-            content_started = True
-            print(chunk.content, end="", flush=True)
-    print()
+    text = await response.display()
+    print(text)
 
 
 if __name__ == "__main__":
