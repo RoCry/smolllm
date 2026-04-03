@@ -24,7 +24,7 @@ class StreamChunk:
 
     @override
     def __str__(self) -> str:
-        return self.reasoning + self.content
+        return self.content
 
     def __bool__(self) -> bool:
         return bool(self.content or self.reasoning)
