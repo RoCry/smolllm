@@ -1,5 +1,5 @@
+import argparse
 import asyncio
-import sys
 
 from dotenv import load_dotenv
 
@@ -8,9 +8,19 @@ from smolllm import LLMResponse, ask_llm
 _ = load_dotenv()
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("prompt", nargs="?", default="Hello")
+    parser.add_argument("--reasoning-effort", dest="reasoning_effort")
+    return parser.parse_args()
+
+
 async def main() -> None:
-    prompt = sys.argv[1] if len(sys.argv) > 1 else "Hello"
-    response: LLMResponse = await ask_llm(prompt)
+    args = parse_args()
+    response: LLMResponse = await ask_llm(
+        args.prompt,
+        reasoning_effort=args.reasoning_effort,
+    )
     print(response)
 
 
