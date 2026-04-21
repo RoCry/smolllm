@@ -30,6 +30,20 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
+## Reasoning Effort
+
+For reasoning-capable models, pass `reasoning_effort` through to the provider.
+Useful for Ollama reasoning models where omitting it can make replies much slower.
+
+```python
+response = await ask_llm(
+    "Reply with one word.",
+    model="ollama/qwen3.5:0.8b",
+    base_url="http://rocry-ubuntu.local:11434/v1",
+    reasoning_effort="none",
+)
+```
+
 ## Provider Configuration
 
 Format: `provider/model_name` (e.g., `openai/gpt-4`, `gemini/gemini-2.0-flash`)

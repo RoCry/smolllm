@@ -109,6 +109,8 @@ class LLMFunction(Protocol):
         timeout: float = ...,
         remove_backticks: bool = ...,
         image_paths: Sequence[str] | None = ...,
+        stream: bool = ...,
+        reasoning_effort: str | None = ...,
     ) -> LLMResponse:
         """Protocol describing the callable shape expected for LLM functions."""
         ...

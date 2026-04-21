@@ -121,6 +121,7 @@ async def _prepare_llm_call(
     base_url: str | None = None,
     image_paths: Sequence[str] | None = None,
     stream: bool = True,
+    reasoning_effort: str | None = None,
 ) -> tuple[str, dict[str, object], httpx.AsyncClient, Provider, str]:
     """Common setup logic for LLM API calls
 
@@ -146,6 +147,7 @@ async def _prepare_llm_call(
         base_url,
         image_list,
         stream=stream,
+        reasoning_effort=reasoning_effort,
     )
     client = prepare_client_and_auth(url, api_key)
 
@@ -229,6 +231,7 @@ async def ask_llm(
     remove_backticks: bool = False,
     image_paths: Sequence[str] | None = None,
     stream: bool = True,
+    reasoning_effort: str | None = None,
 ) -> LLMResponse:
     """
     Args:
@@ -240,6 +243,7 @@ async def ask_llm(
         remove_backticks: Whether to remove backticks from the response, e.g. ```markdown\nblabla\n``` -> blabla
         image_paths: Optional list of image paths to include with the prompt
         stream: Whether to request a streaming response
+        reasoning_effort: Optional reasoning effort passed through to the provider (e.g. "none", "medium", "xhigh")
 
     Returns:
         LLMResponse object containing the text response, model used, and provider
@@ -256,6 +260,7 @@ async def ask_llm(
                 base_url=base_url,
                 image_paths=image_paths,
                 stream=stream,
+                reasoning_effort=reasoning_effort,
             )
 
             input_tokens = estimate_tokens(str(data))
@@ -308,6 +313,7 @@ async def stream_llm(
     base_url: str | None = None,
     timeout: float = 120.0,
     image_paths: Sequence[str] | None = None,
+    reasoning_effort: str | None = None,
 ) -> StreamResponse:
     """Similar to ask_llm but yields chunks of text as they arrive.
 
@@ -317,6 +323,7 @@ async def stream_llm(
         api_key: Optional API key, fallback to ${PROVIDER}_API_KEY
         base_url: Custom base URL for API endpoint, fallback to ${PROVIDER}_BASE_URL
         image_paths: Optional list of image paths to include with the prompt
+        reasoning_effort: Optional reasoning effort passed through to the provider (e.g. "none", "medium", "xhigh")
 
     Returns:
         StreamResponse object with stream iterator and model information
@@ -347,6 +354,7 @@ async def stream_llm(
                     api_key=api_key,
                     base_url=base_url,
                     image_paths=image_paths,
+                    reasoning_effort=reasoning_effort,
                 )
 
                 input_tokens = estimate_tokens(str(data))

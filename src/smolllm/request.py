@@ -32,12 +32,22 @@ def _image_path_to_llm_data_str(image_path: str) -> str:
     return f"data:{mime_type};base64,{image_data}"
 
 
+def _normalize_reasoning_effort(reasoning_effort: str | None) -> str | None:
+    if reasoning_effort is None:
+        return None
+    normalized = reasoning_effort.strip().lower()
+    if not normalized:
+        raise ValueError("reasoning_effort must not be empty")
+    return normalized
+
+
 def _prepare_openai_request(
     prompt: PromptType,
     system_prompt: str | None,
     model_name: str,
     image_paths: Sequence[str],
     stream: bool,
+    reasoning_effort: str | None,
 ) -> dict[str, object]:
     messages: list[Message] = []
     if system_prompt:
@@ -63,11 +73,14 @@ def _prepare_openai_request(
         else:
             messages.append({"role": "user", "content": prompt})
 
-    return {
+    payload: dict[str, object] = {
         "messages": messages,
         "model": model_name,
         "stream": stream,
     }
+    if reasoning_effort is not None:
+        payload["reasoning_effort"] = reasoning_effort
+    return payload
 
 
 def prepare_request_data(
@@ -78,9 +91,11 @@ def prepare_request_data(
     base_url: str,
     image_paths: Sequence[str] | None = None,
     stream: bool = True,
+    reasoning_effort: str | None = None,
 ) -> tuple[str, dict[str, object]]:
     """Prepare request URL, data and headers for the API call"""
     image_path_list = list(image_paths) if image_paths else []
+    normalized_reasoning_effort = _normalize_reasoning_effort(reasoning_effort)
     versioned = _has_version_suffix(base_url)
 
     if provider_name == "anthropic":
@@ -101,7 +116,14 @@ def prepare_request_data(
             url = f"{base_url}/chat/completions"
         else:
             url = f"{base_url}/v1/chat/completions"
-    data = _prepare_openai_request(prompt, system_prompt, model_name, image_path_list, stream)
+    data = _prepare_openai_request(
+        prompt,
+        system_prompt,
+        model_name,
+        image_path_list,
+        stream,
+        normalized_reasoning_effort,
+    )
 
     return url, data
 

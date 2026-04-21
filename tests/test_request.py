@@ -26,6 +26,46 @@ def test_prepare_request_data_defaults_stream_true() -> None:
     assert data["stream"] is True
 
 
+def test_prepare_request_data_with_reasoning_effort() -> None:
+    _, data = prepare_request_data(
+        "hi",
+        None,
+        "test-model",
+        "openai",
+        "https://api.openai.com",
+        reasoning_effort="none",
+    )
+    assert data["reasoning_effort"] == "none"
+
+
+def test_prepare_request_data_normalizes_reasoning_effort() -> None:
+    _, data = prepare_request_data(
+        "hi",
+        None,
+        "test-model",
+        "openai",
+        "https://api.openai.com",
+        reasoning_effort=" Minimum ",
+    )
+    assert data["reasoning_effort"] == "minimum"
+
+
+def test_prepare_request_data_rejects_empty_reasoning_effort() -> None:
+    try:
+        prepare_request_data(
+            "hi",
+            None,
+            "test-model",
+            "openai",
+            "https://api.openai.com",
+            reasoning_effort="   ",
+        )
+    except ValueError as exc:
+        assert "reasoning_effort" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for empty reasoning_effort")
+
+
 def test_url_skips_version_prefix_when_base_url_has_version() -> None:
     """When base_url already ends with /v1, don't prepend /v1 again."""
     url, _ = prepare_request_data("hi", None, "m", "openai", "https://example.com/v1")
