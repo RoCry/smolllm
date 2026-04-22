@@ -147,8 +147,9 @@ def prepare_client_and_auth(
         "authorization": f"Bearer {api_key}",
     }
 
-    # Prepare client
     unsecure = url.startswith("http://")
-    transport = httpx.AsyncHTTPTransport(local_address="0.0.0.0") if unsecure else None
 
-    return httpx.AsyncClient(headers=headers, verify=not unsecure, transport=transport)
+    # Let httpx pick the correct local address family. Forcing an IPv4 bind
+    # breaks reachable HTTP endpoints on some networks, including `.local`
+    # hosts discovered over mDNS.
+    return httpx.AsyncClient(headers=headers, verify=not unsecure)

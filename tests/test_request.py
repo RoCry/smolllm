@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from smolllm.request import prepare_request_data
+import asyncio
+
+import httpx
+
+from smolllm.request import prepare_client_and_auth, prepare_request_data
 
 
 def test_prepare_request_data_respects_stream_flag() -> None:
@@ -98,6 +102,19 @@ def test_prepare_request_data_rejects_ollama_unsupported_reasoning_effort() -> N
         assert "ollama" in str(exc)
     else:
         raise AssertionError("Expected ValueError for Ollama-specific unsupported reasoning_effort")
+
+
+def test_prepare_client_and_auth_http_uses_default_transport(monkeypatch) -> None:
+    def fail_if_called(*args: object, **kwargs: object) -> None:
+        raise AssertionError("prepare_client_and_auth should not override the transport for http URLs")
+
+    monkeypatch.setattr(httpx, "AsyncHTTPTransport", fail_if_called)
+
+    client = prepare_client_and_auth("http://example.com/v1/chat/completions", "token")
+    try:
+        assert client.headers["authorization"] == "Bearer token"
+    finally:
+        asyncio.run(client.aclose())
 
 
 def test_url_skips_version_prefix_when_base_url_has_version() -> None:
