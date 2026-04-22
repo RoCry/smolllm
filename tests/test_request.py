@@ -45,9 +45,9 @@ def test_prepare_request_data_normalizes_reasoning_effort() -> None:
         "test-model",
         "openai",
         "https://api.openai.com",
-        reasoning_effort=" Minimum ",
+        reasoning_effort=" Minimal ",
     )
-    assert data["reasoning_effort"] == "minimum"
+    assert data["reasoning_effort"] == "minimal"
 
 
 def test_prepare_request_data_rejects_empty_reasoning_effort() -> None:
@@ -64,6 +64,40 @@ def test_prepare_request_data_rejects_empty_reasoning_effort() -> None:
         assert "reasoning_effort" in str(exc)
     else:
         raise AssertionError("Expected ValueError for empty reasoning_effort")
+
+
+def test_prepare_request_data_rejects_unknown_reasoning_effort() -> None:
+    try:
+        prepare_request_data(
+            "hi",
+            None,
+            "test-model",
+            "openai",
+            "https://api.openai.com",
+            reasoning_effort="minimum",
+        )
+    except ValueError as exc:
+        assert "reasoning_effort" in str(exc)
+        assert "openai" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for unsupported reasoning_effort")
+
+
+def test_prepare_request_data_rejects_ollama_unsupported_reasoning_effort() -> None:
+    try:
+        prepare_request_data(
+            "hi",
+            None,
+            "test-model",
+            "ollama",
+            "http://localhost:11434",
+            reasoning_effort="minimal",
+        )
+    except ValueError as exc:
+        assert "reasoning_effort" in str(exc)
+        assert "ollama" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for Ollama-specific unsupported reasoning_effort")
 
 
 def test_url_skips_version_prefix_when_base_url_has_version() -> None:

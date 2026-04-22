@@ -9,6 +9,9 @@ import httpx
 
 from .types import Message, PromptType
 
+_OPENAI_REASONING_EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh")
+_OLLAMA_REASONING_EFFORTS = ("none", "low", "medium", "high")
+
 
 def _has_version_suffix(url: str) -> bool:
     """Check if URL already ends with a version path like /v1, /v2, etc."""
@@ -32,12 +35,18 @@ def _image_path_to_llm_data_str(image_path: str) -> str:
     return f"data:{mime_type};base64,{image_data}"
 
 
-def _normalize_reasoning_effort(reasoning_effort: str | None) -> str | None:
+def _normalize_reasoning_effort(reasoning_effort: str | None, *, provider_name: str) -> str | None:
     if reasoning_effort is None:
         return None
     normalized = reasoning_effort.strip().lower()
     if not normalized:
         raise ValueError("reasoning_effort must not be empty")
+    allowed = _OLLAMA_REASONING_EFFORTS if provider_name == "ollama" else _OPENAI_REASONING_EFFORTS
+    if normalized not in allowed:
+        expected = ", ".join(allowed)
+        raise ValueError(
+            f"Unsupported reasoning_effort={reasoning_effort!r} for provider={provider_name!r}; expected one of: {expected}"
+        )
     return normalized
 
 
@@ -95,7 +104,7 @@ def prepare_request_data(
 ) -> tuple[str, dict[str, object]]:
     """Prepare request URL, data and headers for the API call"""
     image_path_list = list(image_paths) if image_paths else []
-    normalized_reasoning_effort = _normalize_reasoning_effort(reasoning_effort)
+    normalized_reasoning_effort = _normalize_reasoning_effort(reasoning_effort, provider_name=provider_name)
     versioned = _has_version_suffix(base_url)
 
     if provider_name == "anthropic":
