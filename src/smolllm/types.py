@@ -55,6 +55,28 @@ class LLMResponse:
 
 
 @dataclass(slots=True)
+class EmbedResponse:
+    """Container for embedding vectors returned by an embeddings call.
+
+    `embeddings` is always a list of vectors, even when a single string was
+    passed in — index `[0]` for the single-input case.
+    """
+
+    embeddings: list[list[float]]
+    model: str  # e.g. "ollama/qwen3-embedding:4b"
+    model_name: str  # e.g. "qwen3-embedding:4b"
+    dimensions: int  # actual length of the returned vectors
+    provider: str | None = None
+    prompt_tokens: int | None = None
+
+    def __len__(self) -> int:
+        return len(self.embeddings)
+
+    def __getitem__(self, idx: int) -> list[float]:
+        return self.embeddings[idx]
+
+
+@dataclass(slots=True)
 class StreamResponse:
     """Wrapper for streaming responses with model metadata.
 

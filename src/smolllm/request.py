@@ -92,6 +92,30 @@ def _prepare_openai_request(
     return payload
 
 
+def _build_endpoint_url(base_url: str, provider_name: str, suffix: str) -> str:
+    """Build the full request URL by appending an OpenAI-style endpoint suffix.
+
+    suffix is the path after the version segment, e.g. "chat/completions" or
+    "embeddings".
+    """
+    versioned = _has_version_suffix(base_url)
+    if provider_name == "anthropic":
+        # [OpenAI SDK compatibility (beta) - Anthropic](https://docs.anthropic.com/en/api/openai-sdk)
+        stripped = base_url.rstrip("/")
+        return f"{stripped}/{suffix}" if versioned else f"{stripped}/v1/{suffix}"
+    if provider_name == "gemini":
+        # [OpenAI compatibility | Gemini API](https://ai.google.dev/gemini-api/docs/openai)
+        stripped = base_url.rstrip("/")
+        return f"{stripped}/{suffix}" if versioned else f"{stripped}/v1beta/openai/{suffix}"
+    if base_url.endswith("#"):
+        return base_url[:-1]
+    if base_url.endswith("/"):
+        return f"{base_url}{suffix}"
+    if versioned:
+        return f"{base_url}/{suffix}"
+    return f"{base_url}/v1/{suffix}"
+
+
 def prepare_request_data(
     prompt: PromptType,
     system_prompt: str | None,
@@ -105,26 +129,7 @@ def prepare_request_data(
     """Prepare request URL, data and headers for the API call"""
     image_path_list = list(image_paths) if image_paths else []
     normalized_reasoning_effort = _normalize_reasoning_effort(reasoning_effort, provider_name=provider_name)
-    versioned = _has_version_suffix(base_url)
-
-    if provider_name == "anthropic":
-        # [OpenAI SDK compatibility (beta) - Anthropic](https://docs.anthropic.com/en/api/openai-sdk)
-        stripped = base_url.rstrip("/")
-        url = f"{stripped}/chat/completions" if versioned else f"{stripped}/v1/chat/completions"
-    elif provider_name == "gemini":
-        # [OpenAI compatibility | Gemini API](https://ai.google.dev/gemini-api/docs/openai)
-        stripped = base_url.rstrip("/")
-        url = f"{stripped}/chat/completions" if versioned else f"{stripped}/v1beta/openai/chat/completions"
-    else:
-        # Handle URL based on suffix
-        if base_url.endswith("#"):
-            url = base_url[:-1]
-        elif base_url.endswith("/"):
-            url = f"{base_url}chat/completions"
-        elif versioned:
-            url = f"{base_url}/chat/completions"
-        else:
-            url = f"{base_url}/v1/chat/completions"
+    url = _build_endpoint_url(base_url, provider_name, "chat/completions")
     data = _prepare_openai_request(
         prompt,
         system_prompt,
@@ -133,8 +138,43 @@ def prepare_request_data(
         stream,
         normalized_reasoning_effort,
     )
-
     return url, data
+
+
+def prepare_embedding_request_data(
+    inputs: str | Sequence[str],
+    model_name: str,
+    provider_name: str,
+    base_url: str,
+    dimensions: int | None = None,
+) -> tuple[str, dict[str, object]]:
+    """Prepare request URL and payload for an OpenAI-compatible embeddings call.
+
+    `dimensions` is forwarded to providers that support output truncation
+    (OpenAI text-embedding-3+, Ollama recent versions, and Matryoshka models
+    such as qwen3-embedding). Providers that don't recognise the field
+    typically ignore it.
+    """
+    if isinstance(inputs, str):
+        if not inputs:
+            raise ValueError("input must not be empty")
+        payload_input: object = inputs
+    else:
+        items = list(inputs)
+        if not items:
+            raise ValueError("input list must not be empty")
+        if any(not isinstance(item, str) or not item for item in items):
+            raise ValueError("input list entries must be non-empty strings")
+        payload_input = items
+
+    if dimensions is not None and dimensions <= 0:
+        raise ValueError("dimensions must be a positive integer")
+
+    url = _build_endpoint_url(base_url, provider_name, "embeddings")
+    payload: dict[str, object] = {"model": model_name, "input": payload_input}
+    if dimensions is not None:
+        payload["dimensions"] = dimensions
+    return url, payload
 
 
 def prepare_client_and_auth(

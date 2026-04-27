@@ -14,9 +14,17 @@ from .display import ResponseDisplay
 from .log import logger
 from .metrics import estimate_tokens, format_metrics
 from .providers import Provider, parse_model_string
-from .request import prepare_client_and_auth, prepare_request_data
+from .request import prepare_client_and_auth, prepare_embedding_request_data, prepare_request_data
 from .stream import process_chunk_line
-from .types import LLMResponse, ModelInput, PromptType, StreamError, StreamHandler, StreamResponse
+from .types import (
+    EmbedResponse,
+    LLMResponse,
+    ModelInput,
+    PromptType,
+    StreamError,
+    StreamHandler,
+    StreamResponse,
+)
 from .utils import ThinkTagFilter, extract_think_tags, strip_backticks
 
 
@@ -457,3 +465,107 @@ async def _process_stream_response(
         ttft_ms = max(0, int((first_token_time - start_time) * 1000))
 
     return text, reasoning, ttft_ms
+
+
+def _parse_embedding_payload(payload: object) -> tuple[list[list[float]], int | None]:
+    """Pull the vector list and prompt-token usage out of an OpenAI-shaped response."""
+    if not isinstance(payload, dict):
+        raise TypeError("Embedding response payload must be a mapping")
+    data = payload.get("data")
+    if not isinstance(data, list) or not data:
+        raise ValueError("Embedding response missing data")
+
+    vectors: list[list[float]] = []
+    for entry in data:
+        if not isinstance(entry, dict):
+            raise TypeError("Embedding entry must be a mapping")
+        vec = entry.get("embedding")
+        if not isinstance(vec, list) or not vec:
+            raise ValueError("Embedding entry missing vector")
+        vectors.append([float(x) for x in vec])
+
+    usage = payload.get("usage")
+    prompt_tokens: int | None = None
+    if isinstance(usage, dict):
+        pt = usage.get("prompt_tokens")
+        if isinstance(pt, int):
+            prompt_tokens = pt
+
+    return vectors, prompt_tokens
+
+
+async def embed_llm(
+    inputs: str | Sequence[str],
+    *,
+    model: ModelInput | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    dimensions: int | None = None,
+    timeout: float = 120.0,
+) -> EmbedResponse:
+    """Generate embedding vectors via an OpenAI-compatible /embeddings endpoint.
+
+    Args:
+        inputs: A single string or list of strings to embed.
+        model: provider/model_name (e.g. "ollama/qwen3-embedding:4b"); same
+            selector semantics as ``ask_llm`` (str / list / set / dict).
+            Falls back to ``SMOLLLM_MODEL``.
+        dimensions: Optional output dimensionality. Forwarded to providers
+            that support truncation (OpenAI text-embedding-3+, recent Ollama
+            with Matryoshka models like qwen3-embedding). Ignored otherwise.
+
+    Returns:
+        ``EmbedResponse`` whose ``embeddings`` is always a list of vectors —
+        index ``[0]`` for the single-input case.
+    """
+    selector = _create_selector(model)
+    last_error: Exception | None = None
+    while (m := selector.next_model()) is not None:
+        try:
+            provider, model_name = parse_model_string(m, base_url=base_url)
+            resolved_base = base_url or _get_env_var(provider.name, "BASE_URL", provider.base_url)
+            resolved_key = api_key or _get_env_var(provider.name, "API_KEY")
+            chosen_key, chosen_url = balancer.choose_pair(resolved_key, resolved_base)
+            url, data = prepare_embedding_request_data(
+                inputs,
+                model_name=model_name,
+                provider_name=provider.name,
+                base_url=chosen_url,
+                dimensions=dimensions,
+            )
+            client = prepare_client_and_auth(url, chosen_key)
+
+            key_preview = chosen_key[:5] + "..." + chosen_key[-4:]
+            logger.info(f"Embedding {url} model={model_name} api_key={key_preview} dimensions={dimensions}")
+
+            start_time = perf_counter()
+            async with client:
+                response = await client.post(url, json=data, timeout=timeout)
+                await _handle_http_error(response)
+                await response.aread()
+                payload = response.json()
+
+            vectors, prompt_tokens = _parse_embedding_payload(payload)
+            elapsed = perf_counter() - start_time
+            actual_dim = len(vectors[0])
+            logger.info(
+                f"Embedded model={model_name} count={len(vectors)} dim={actual_dim} "
+                f"prompt_tokens={prompt_tokens} elapsed={elapsed:.2f}s"
+            )
+
+            return EmbedResponse(
+                embeddings=vectors,
+                model=m,
+                model_name=model_name,
+                dimensions=actual_dim,
+                provider=provider.name,
+                prompt_tokens=prompt_tokens,
+            )
+        except Exception as e:
+            last_error = e
+            logger.warning(f"Failed to embed with model {m}: {e}")
+            continue
+
+    if last_error:
+        raise last_error
+    raise ValueError("No valid models found")
