@@ -3,7 +3,7 @@ revision = 3
 requires-python = ">=3.13"
 
 [options]
-exclude-newer = "2026-03-27T05:41:25.415829Z"
+exclude-newer = "2026-04-21T00:38:01.592726Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -565,7 +565,7 @@ wheels = [
 
 [[package]]
 name = "smolllm"
-version = "0.5.1"
+version = "0.6.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
