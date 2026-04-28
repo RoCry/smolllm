@@ -13,7 +13,7 @@ from .balancer import balancer
 from .display import ResponseDisplay
 from .log import logger
 from .metrics import estimate_tokens, format_metrics
-from .providers import Provider, parse_model_string
+from .providers import Provider, parse_model_spec, parse_model_string
 from .request import prepare_client_and_auth, prepare_embedding_request_data, prepare_request_data
 from .stream import process_chunk_line
 from .types import (
@@ -260,15 +260,17 @@ async def ask_llm(
     last_error: Exception | None = None
     while (m := selector.next_model()) is not None:
         try:
+            model_spec, effort_override = parse_model_spec(m)
+            effective_effort = effort_override if effort_override is not None else reasoning_effort
             url, data, client, provider, model_name = await _prepare_llm_call(
                 prompt,
                 system_prompt=system_prompt,
-                model=m,
+                model=model_spec,
                 api_key=api_key,
                 base_url=base_url,
                 image_paths=image_paths,
                 stream=stream,
-                reasoning_effort=reasoning_effort,
+                reasoning_effort=effective_effort,
             )
 
             input_tokens = estimate_tokens(str(data))
@@ -302,7 +304,9 @@ async def ask_llm(
 
             logger.info(format_metrics(model_name, input_tokens, output_tokens, total_time, ttft_ms))
 
-            return LLMResponse(text=resp, model=m, model_name=model_name, provider=provider.name, reasoning=reasoning)
+            return LLMResponse(
+                text=resp, model=model_spec, model_name=model_name, provider=provider.name, reasoning=reasoning
+            )
         except Exception as e:
             last_error = e
             logger.warning(f"Failed to get response from model {m}: {e}")
@@ -355,14 +359,16 @@ async def stream_llm(
             accumulated_content: list[str] = []
             accumulated_reasoning: list[str] = []
             try:
+                model_spec, effort_override = parse_model_spec(m)
+                effective_effort = effort_override if effort_override is not None else reasoning_effort
                 url, data, client, provider, model_name = await _prepare_llm_call(
                     prompt,
                     system_prompt=system_prompt,
-                    model=m,
+                    model=model_spec,
                     api_key=api_key,
                     base_url=base_url,
                     image_paths=image_paths,
-                    reasoning_effort=reasoning_effort,
+                    reasoning_effort=effective_effort,
                 )
 
                 input_tokens = estimate_tokens(str(data))
@@ -412,7 +418,7 @@ async def stream_llm(
                 else:
                     raise StreamError("Stream completed without content")
 
-                successful_model[0] = m
+                successful_model[0] = model_spec
                 successful_model_name[0] = model_name
                 successful_provider[0] = provider.name
                 return  # Stream completed successfully
@@ -522,7 +528,8 @@ async def embed_llm(
     last_error: Exception | None = None
     while (m := selector.next_model()) is not None:
         try:
-            provider, model_name = parse_model_string(m, base_url=base_url)
+            model_spec, _ = parse_model_spec(m)
+            provider, model_name = parse_model_string(model_spec, base_url=base_url)
             resolved_base = base_url or _get_env_var(provider.name, "BASE_URL", provider.base_url)
             resolved_key = api_key or _get_env_var(provider.name, "API_KEY")
             chosen_key, chosen_url = balancer.choose_pair(resolved_key, resolved_base)
@@ -555,7 +562,7 @@ async def embed_llm(
 
             return EmbedResponse(
                 embeddings=vectors,
-                model=m,
+                model=model_spec,
                 model_name=model_name,
                 dimensions=actual_dim,
                 provider=provider.name,

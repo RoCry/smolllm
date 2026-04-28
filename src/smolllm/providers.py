@@ -31,6 +31,16 @@ def generate_provider_map() -> dict[str, Provider]:
 PROVIDERS = generate_provider_map()
 
 
+# Split "provider/model!effort" into ("provider/model", "effort"); no suffix → effort is None.
+# An empty value (e.g. "model!") parses as ("model", None) so trailing separators are no-ops.
+def parse_model_spec(spec: str) -> tuple[str, str | None]:
+    model, sep, effort = spec.partition("!")
+    if not sep:
+        return model.strip(), None
+    effort = effort.strip()
+    return model.strip(), effort or None
+
+
 # try parse provider and model name from model_str, e.g.
 # "gemini/gemini-2.0-flash" -> ("gemini", "gemini-2.0-flash")
 # "gemini" -> ("gemini", "gemini-2.0-flash") // /w default model for the provider
