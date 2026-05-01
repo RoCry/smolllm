@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import random
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from time import perf_counter
@@ -18,14 +19,17 @@ from .request import prepare_client_and_auth, prepare_embedding_request_data, pr
 from .stream import process_chunk_line
 from .types import (
     EmbedResponse,
+    Hook,
     LLMResponse,
     ModelInput,
     PromptType,
+    RequestEvent,
     StreamError,
     StreamHandler,
     StreamResponse,
+    Usage,
 )
-from .utils import ThinkTagFilter, extract_think_tags, strip_backticks
+from .utils import ThinkTagFilter, extract_think_tags, preview_api_key, strip_backticks
 
 
 class ModelSelector(ABC):
@@ -130,11 +134,13 @@ async def _prepare_llm_call(
     image_paths: Sequence[str] | None = None,
     stream: bool = True,
     reasoning_effort: str | None = None,
-) -> tuple[str, dict[str, object], httpx.AsyncClient, Provider, str]:
+    temperature: float | None = None,
+    top_p: float | None = None,
+) -> tuple[str, dict[str, object], httpx.AsyncClient, Provider, str, str]:
     """Common setup logic for LLM API calls
 
     Returns:
-        tuple of (url, data, client, provider, model_name)
+        tuple of (url, data, client, provider, model_name, api_key)
     """
     if not model:
         model = os.getenv("SMOLLLM_MODEL")
@@ -156,13 +162,16 @@ async def _prepare_llm_call(
         image_list,
         stream=stream,
         reasoning_effort=reasoning_effort,
+        temperature=temperature,
+        top_p=top_p,
     )
     client = prepare_client_and_auth(url, api_key)
 
-    api_key_preview = api_key[:5] + "..." + api_key[-4:]
-    logger.info(f"Sending {url} model={model_name} api_key={api_key_preview} ~tokens={estimate_tokens(str(data))}")
+    logger.info(
+        f"Sending {url} model={model_name} api_key={preview_api_key(api_key)} ~tokens={estimate_tokens(str(data))}"
+    )
 
-    return url, data, client, provider, model_name
+    return url, data, client, provider, model_name, api_key
 
 
 async def _handle_http_error(response: httpx.Response) -> None:
@@ -240,6 +249,9 @@ async def ask_llm(
     image_paths: Sequence[str] | None = None,
     stream: bool = True,
     reasoning_effort: str | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
+    hook: Hook | None = None,
 ) -> LLMResponse:
     """
     Args:
@@ -259,10 +271,19 @@ async def ask_llm(
     selector = _create_selector(model)
     last_error: Exception | None = None
     while (m := selector.next_model()) is not None:
+        # Pre-attempt placeholders for usage tracking on early failures
+        attempt_provider = ""
+        attempt_model_spec = m
+        attempt_model_name = ""
+        attempt_api_key = ""
+        input_tokens = 0
+        start_time = perf_counter()
+        ttft_ms: int | None = None
         try:
             model_spec, effort_override = parse_model_spec(m)
+            attempt_model_spec = model_spec
             effective_effort = effort_override if effort_override is not None else reasoning_effort
-            url, data, client, provider, model_name = await _prepare_llm_call(
+            url, data, client, provider, model_name, used_api_key = await _prepare_llm_call(
                 prompt,
                 system_prompt=system_prompt,
                 model=model_spec,
@@ -271,11 +292,16 @@ async def ask_llm(
                 image_paths=image_paths,
                 stream=stream,
                 reasoning_effort=effective_effort,
+                temperature=temperature,
+                top_p=top_p,
             )
+            attempt_provider = provider.name
+            attempt_model_name = model_name
+            attempt_api_key = used_api_key
 
             input_tokens = estimate_tokens(str(data))
             start_time = perf_counter()
-            ttft_ms: int | None = None
+            ttft_ms = None
 
             reasoning = ""
             async with client:
@@ -304,12 +330,43 @@ async def ask_llm(
 
             logger.info(format_metrics(model_name, input_tokens, output_tokens, total_time, ttft_ms))
 
+            usage = Usage(
+                provider=provider.name,
+                model=model_spec,
+                model_name=model_name,
+                api_key_hint=preview_api_key(used_api_key),
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                duration_ms=int(total_time * 1000),
+                ttft_ms=ttft_ms,
+            )
+            if hook is not None:
+                hook(RequestEvent(usage=usage, error=None, timestamp=time.time()))
+
             return LLMResponse(
-                text=resp, model=model_spec, model_name=model_name, provider=provider.name, reasoning=reasoning
+                text=resp,
+                model=model_spec,
+                model_name=model_name,
+                provider=provider.name,
+                reasoning=reasoning,
+                usage=usage,
             )
         except Exception as e:
             last_error = e
             logger.warning(f"Failed to get response from model {m}: {e}")
+            if hook is not None:
+                duration_ms = int((perf_counter() - start_time) * 1000)
+                fail_usage = Usage(
+                    provider=attempt_provider,
+                    model=attempt_model_spec,
+                    model_name=attempt_model_name,
+                    api_key_hint=preview_api_key(attempt_api_key) if attempt_api_key else "",
+                    input_tokens=input_tokens,
+                    output_tokens=0,
+                    duration_ms=duration_ms,
+                    ttft_ms=None,
+                )
+                hook(RequestEvent(usage=fail_usage, error=e, timestamp=time.time()))
             continue
     if last_error:
         raise last_error
@@ -326,6 +383,9 @@ async def stream_llm(
     timeout: float = 120.0,
     image_paths: Sequence[str] | None = None,
     reasoning_effort: str | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
+    hook: Hook | None = None,
 ) -> StreamResponse:
     """Similar to ask_llm but yields chunks of text as they arrive.
 
@@ -350,6 +410,7 @@ async def stream_llm(
     successful_model: list[str | None] = [None]
     successful_model_name: list[str | None] = [None]
     successful_provider: list[str | None] = [None]
+    response_ref: list[StreamResponse | None] = [None]
 
     async def _stream_with_fallback():
         nonlocal selector
@@ -358,10 +419,17 @@ async def stream_llm(
         while (m := selector.next_model()) is not None:
             accumulated_content: list[str] = []
             accumulated_reasoning: list[str] = []
+            attempt_provider = ""
+            attempt_model_spec = m
+            attempt_model_name = ""
+            attempt_api_key = ""
+            input_tokens = 0
+            start_time = perf_counter()
             try:
                 model_spec, effort_override = parse_model_spec(m)
+                attempt_model_spec = model_spec
                 effective_effort = effort_override if effort_override is not None else reasoning_effort
-                url, data, client, provider, model_name = await _prepare_llm_call(
+                url, data, client, provider, model_name, used_api_key = await _prepare_llm_call(
                     prompt,
                     system_prompt=system_prompt,
                     model=model_spec,
@@ -369,7 +437,12 @@ async def stream_llm(
                     base_url=base_url,
                     image_paths=image_paths,
                     reasoning_effort=effective_effort,
+                    temperature=temperature,
+                    top_p=top_p,
                 )
+                attempt_provider = provider.name
+                attempt_model_name = model_name
+                attempt_api_key = used_api_key
 
                 input_tokens = estimate_tokens(str(data))
                 start_time = perf_counter()
@@ -421,9 +494,37 @@ async def stream_llm(
                 successful_model[0] = model_spec
                 successful_model_name[0] = model_name
                 successful_provider[0] = provider.name
+
+                usage = Usage(
+                    provider=provider.name,
+                    model=model_spec,
+                    model_name=model_name,
+                    api_key_hint=preview_api_key(used_api_key),
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    duration_ms=int(total_time * 1000),
+                    ttft_ms=ttft_ms,
+                )
+                if response_ref[0] is not None:
+                    response_ref[0].usage = usage
+                if hook is not None:
+                    hook(RequestEvent(usage=usage, error=None, timestamp=time.time()))
                 return  # Stream completed successfully
 
             except Exception as e:
+                if hook is not None:
+                    duration_ms = int((perf_counter() - start_time) * 1000)
+                    fail_usage = Usage(
+                        provider=attempt_provider,
+                        model=attempt_model_spec,
+                        model_name=attempt_model_name,
+                        api_key_hint=preview_api_key(attempt_api_key) if attempt_api_key else "",
+                        input_tokens=input_tokens,
+                        output_tokens=0,
+                        duration_ms=duration_ms,
+                        ttft_ms=None,
+                    )
+                    hook(RequestEvent(usage=fail_usage, error=e, timestamp=time.time()))
                 if isinstance(e, StreamError) and e.partial:
                     last_error = e
                     logger.warning(f"Stream failed for model {m}, not retrying (partial output): {e}")
@@ -437,12 +538,13 @@ async def stream_llm(
             raise last_error
         raise ValueError("No valid models found")
 
-    return StreamResponse(
+    response_ref[0] = StreamResponse(
         stream=_stream_with_fallback(),
         model=successful_model[0] or "unknown",
         model_name=successful_model_name[0] or "unknown",
         provider=successful_provider[0],
     )
+    return response_ref[0]
 
 
 async def _process_stream_response(
@@ -508,6 +610,7 @@ async def embed_llm(
     base_url: str | None = None,
     dimensions: int | None = None,
     timeout: float = 120.0,
+    hook: Hook | None = None,
 ) -> EmbedResponse:
     """Generate embedding vectors via an OpenAI-compatible /embeddings endpoint.
 
@@ -527,12 +630,22 @@ async def embed_llm(
     selector = _create_selector(model)
     last_error: Exception | None = None
     while (m := selector.next_model()) is not None:
+        attempt_provider = ""
+        attempt_model_spec = m
+        attempt_model_name = ""
+        attempt_api_key = ""
+        input_tokens = 0
+        start_time = perf_counter()
         try:
             model_spec, _ = parse_model_spec(m)
+            attempt_model_spec = model_spec
             provider, model_name = parse_model_string(model_spec, base_url=base_url)
+            attempt_provider = provider.name
+            attempt_model_name = model_name
             resolved_base = base_url or _get_env_var(provider.name, "BASE_URL", provider.base_url)
             resolved_key = api_key or _get_env_var(provider.name, "API_KEY")
             chosen_key, chosen_url = balancer.choose_pair(resolved_key, resolved_base)
+            attempt_api_key = chosen_key
             url, data = prepare_embedding_request_data(
                 inputs,
                 model_name=model_name,
@@ -542,9 +655,11 @@ async def embed_llm(
             )
             client = prepare_client_and_auth(url, chosen_key)
 
-            key_preview = chosen_key[:5] + "..." + chosen_key[-4:]
-            logger.info(f"Embedding {url} model={model_name} api_key={key_preview} dimensions={dimensions}")
+            logger.info(
+                f"Embedding {url} model={model_name} api_key={preview_api_key(chosen_key)} dimensions={dimensions}"
+            )
 
+            input_tokens = estimate_tokens(str(data))
             start_time = perf_counter()
             async with client:
                 response = await client.post(url, json=data, timeout=timeout)
@@ -560,6 +675,19 @@ async def embed_llm(
                 f"prompt_tokens={prompt_tokens} elapsed={elapsed:.2f}s"
             )
 
+            usage = Usage(
+                provider=provider.name,
+                model=model_spec,
+                model_name=model_name,
+                api_key_hint=preview_api_key(chosen_key),
+                input_tokens=prompt_tokens if prompt_tokens is not None else input_tokens,
+                output_tokens=0,
+                duration_ms=int(elapsed * 1000),
+                ttft_ms=None,
+            )
+            if hook is not None:
+                hook(RequestEvent(usage=usage, error=None, timestamp=time.time()))
+
             return EmbedResponse(
                 embeddings=vectors,
                 model=model_spec,
@@ -567,10 +695,24 @@ async def embed_llm(
                 dimensions=actual_dim,
                 provider=provider.name,
                 prompt_tokens=prompt_tokens,
+                usage=usage,
             )
         except Exception as e:
             last_error = e
             logger.warning(f"Failed to embed with model {m}: {e}")
+            if hook is not None:
+                duration_ms = int((perf_counter() - start_time) * 1000)
+                fail_usage = Usage(
+                    provider=attempt_provider,
+                    model=attempt_model_spec,
+                    model_name=attempt_model_name,
+                    api_key_hint=preview_api_key(attempt_api_key) if attempt_api_key else "",
+                    input_tokens=input_tokens,
+                    output_tokens=0,
+                    duration_ms=duration_ms,
+                    ttft_ms=None,
+                )
+                hook(RequestEvent(usage=fail_usage, error=e, timestamp=time.time()))
             continue
 
     if last_error:

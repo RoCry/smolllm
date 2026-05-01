@@ -94,6 +94,13 @@ class ThinkTagFilter:
         return StreamChunk(content=buf)
 
 
+def preview_api_key(api_key: str) -> str:
+    """Return a short obfuscated preview like ``sk-12...ab`` for log/usage hints."""
+    if len(api_key) <= 9:
+        return api_key
+    return api_key[:5] + "..." + api_key[-4:]
+
+
 def strip_backticks(text: str) -> str:
     """Strip backticks from the beginning and end of a string"""
     # must be starts with ``` and ends with ```

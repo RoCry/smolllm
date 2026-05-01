@@ -57,6 +57,8 @@ def _prepare_openai_request(
     image_paths: Sequence[str],
     stream: bool,
     reasoning_effort: str | None,
+    temperature: float | None,
+    top_p: float | None,
 ) -> dict[str, object]:
     messages: list[Message] = []
     if system_prompt:
@@ -89,6 +91,10 @@ def _prepare_openai_request(
     }
     if reasoning_effort is not None:
         payload["reasoning_effort"] = reasoning_effort
+    if temperature is not None:
+        payload["temperature"] = temperature
+    if top_p is not None:
+        payload["top_p"] = top_p
     return payload
 
 
@@ -125,8 +131,14 @@ def prepare_request_data(
     image_paths: Sequence[str] | None = None,
     stream: bool = True,
     reasoning_effort: str | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
 ) -> tuple[str, dict[str, object]]:
     """Prepare request URL, data and headers for the API call"""
+    if temperature is not None and not 0.0 <= temperature <= 2.0:
+        raise ValueError(f"temperature must be in [0, 2]; got {temperature}")
+    if top_p is not None and not 0.0 <= top_p <= 1.0:
+        raise ValueError(f"top_p must be in [0, 1]; got {top_p}")
     image_path_list = list(image_paths) if image_paths else []
     normalized_reasoning_effort = _normalize_reasoning_effort(reasoning_effort, provider_name=provider_name)
     url = _build_endpoint_url(base_url, provider_name, "chat/completions")
@@ -137,6 +149,8 @@ def prepare_request_data(
         image_path_list,
         stream,
         normalized_reasoning_effort,
+        temperature,
+        top_p,
     )
     return url, data
 

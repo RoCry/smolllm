@@ -37,6 +37,32 @@ class StreamChunk:
 
 
 @dataclass(slots=True)
+class Usage:
+    """Per-call routing details and token/timing metrics."""
+
+    provider: str
+    model: str  # full spec, e.g. "openai/gpt-4o"
+    model_name: str  # e.g. "gpt-4o"
+    api_key_hint: str  # e.g. "sk-12...ab"
+    input_tokens: int
+    output_tokens: int
+    duration_ms: int
+    ttft_ms: int | None = None
+
+
+@dataclass(slots=True)
+class RequestEvent:
+    """Emitted after each LLM call attempt (success or failure)."""
+
+    usage: Usage
+    error: Exception | None
+    timestamp: float  # unix epoch seconds
+
+
+Hook = Callable[["RequestEvent"], None]
+
+
+@dataclass(slots=True)
 class LLMResponse:
     """High-level response container with provider metadata."""
 
@@ -45,6 +71,7 @@ class LLMResponse:
     model_name: str  # e.g. "gemini-2.0-flash"
     provider: str | None = None
     reasoning: str = ""
+    usage: Usage | None = None
 
     @override
     def __str__(self) -> str:
@@ -68,6 +95,7 @@ class EmbedResponse:
     dimensions: int  # actual length of the returned vectors
     provider: str | None = None
     prompt_tokens: int | None = None
+    usage: Usage | None = None
 
     def __len__(self) -> int:
         return len(self.embeddings)
@@ -90,6 +118,7 @@ class StreamResponse:
     model_name: str  # e.g. "gemini-2.5-flash"
     provider: str | None = None
     reasoning: str = ""
+    usage: Usage | None = None
 
     def __aiter__(self) -> AsyncIterator[StreamChunk]:
         return self
@@ -133,6 +162,9 @@ class LLMFunction(Protocol):
         image_paths: Sequence[str] | None = ...,
         stream: bool = ...,
         reasoning_effort: str | None = ...,
+        temperature: float | None = ...,
+        top_p: float | None = ...,
+        hook: Hook | None = ...,
     ) -> LLMResponse:
         """Protocol describing the callable shape expected for LLM functions."""
         ...
