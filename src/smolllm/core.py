@@ -16,7 +16,7 @@ from .log import logger
 from .metrics import estimate_tokens, format_metrics
 from .providers import Provider, parse_model_spec, parse_model_string
 from .request import prepare_client_and_auth, prepare_embedding_request_data, prepare_request_data
-from .stream import process_chunk_line
+from .stream import decode_sse_chunk, extract_delta, extract_model
 from .types import (
     EmbedResponse,
     Hook,
@@ -306,17 +306,21 @@ async def ask_llm(
             ttft_ms = None
 
             reasoning = ""
+            resolved_model: str | None = None
             async with client:
                 if stream:
                     async with client.stream("POST", url, json=data, timeout=timeout) as response:
                         await _handle_http_error(response)
-                        resp, reasoning, ttft_ms = await _process_stream_response(response, handler, start_time)
+                        resp, reasoning, ttft_ms, resolved_model = await _process_stream_response(
+                            response, handler, start_time
+                        )
                 else:
                     response = await client.post(url, json=data, timeout=timeout)
                     await _handle_http_error(response)
                     await response.aread()
                     payload = response.json()
                     resp, reasoning = _extract_text_from_response(payload)
+                    resolved_model = extract_model(payload)
                     if handler is not None:
                         from .types import StreamChunk
 
@@ -350,6 +354,7 @@ async def ask_llm(
                 model=model_spec,
                 model_name=model_name,
                 provider=provider.name,
+                resolved_model=resolved_model,
                 reasoning=reasoning,
                 usage=usage,
             )
@@ -408,10 +413,8 @@ async def stream_llm(
     """
     selector = _create_selector(model)
 
-    # Track which model succeeded for the response metadata
-    successful_model: list[str | None] = [None]
-    successful_model_name: list[str | None] = [None]
-    successful_provider: list[str | None] = [None]
+    # Back-patched with the winning model's metadata once a stream succeeds; the
+    # value is unknown until then because the generator below runs lazily.
     response_ref: list[StreamResponse | None] = [None]
 
     async def _stream_with_fallback():
@@ -421,6 +424,7 @@ async def stream_llm(
         while (m := selector.next_model()) is not None:
             accumulated_content: list[str] = []
             accumulated_reasoning: list[str] = []
+            resolved_model: str | None = None
             attempt_provider = ""
             attempt_model_spec = m
             attempt_model_name = ""
@@ -456,7 +460,12 @@ async def stream_llm(
                         async with client.stream("POST", url, json=data, timeout=timeout) as response:
                             await _handle_http_error(response)
                             async for line in response.aiter_lines():
-                                if chunk := await process_chunk_line(line):
+                                raw = decode_sse_chunk(line)
+                                if raw is None:
+                                    continue
+                                if resolved_model is None:
+                                    resolved_model = extract_model(raw)
+                                if chunk := extract_delta(raw):
                                     chunk = think_filter.feed(chunk)
                                     if chunk:
                                         if first_token_time is None:
@@ -493,10 +502,6 @@ async def stream_llm(
                 else:
                     raise StreamError("Stream completed without content")
 
-                successful_model[0] = model_spec
-                successful_model_name[0] = model_name
-                successful_provider[0] = provider.name
-
                 usage = Usage(
                     provider=provider.name,
                     model=model_spec,
@@ -507,8 +512,12 @@ async def stream_llm(
                     duration_ms=int(total_time * 1000),
                     ttft_ms=ttft_ms,
                 )
-                if response_ref[0] is not None:
-                    response_ref[0].usage = usage
+                if (sr := response_ref[0]) is not None:
+                    sr.model = model_spec
+                    sr.model_name = model_name
+                    sr.provider = provider.name
+                    sr.resolved_model = resolved_model
+                    sr.usage = usage
                 if hook is not None:
                     hook(RequestEvent(usage=usage, error=None, timestamp=time.time()))
                 return  # Stream completed successfully
@@ -540,11 +549,12 @@ async def stream_llm(
             raise last_error
         raise ValueError("No valid models found")
 
+    # Placeholders; back-patched in _stream_with_fallback once a model wins.
     response_ref[0] = StreamResponse(
         stream=_stream_with_fallback(),
-        model=successful_model[0] or "unknown",
-        model_name=successful_model_name[0] or "unknown",
-        provider=successful_provider[0],
+        model="unknown",
+        model_name="unknown",
+        provider=None,
     )
     return response_ref[0]
 
@@ -553,13 +563,19 @@ async def _process_stream_response(
     response: httpx.Response,
     stream_handler: StreamHandler | None,
     start_time: float,
-) -> tuple[str, str, int | None]:
-    """Returns (text, reasoning, ttft_ms)."""
+) -> tuple[str, str, int | None, str | None]:
+    """Returns (text, reasoning, ttft_ms, resolved_model)."""
     first_token_time: float | None = None
+    resolved_model: str | None = None
     think_filter = ThinkTagFilter()
     with ResponseDisplay(stream_handler) as display:
         async for line in response.aiter_lines():
-            if chunk := await process_chunk_line(line):
+            raw = decode_sse_chunk(line)
+            if raw is None:
+                continue
+            if resolved_model is None:
+                resolved_model = extract_model(raw)
+            if chunk := extract_delta(raw):
                 chunk = think_filter.feed(chunk)
                 if chunk:
                     if first_token_time is None:
@@ -574,7 +590,7 @@ async def _process_stream_response(
     if first_token_time is not None:
         ttft_ms = max(0, int((first_token_time - start_time) * 1000))
 
-    return text, reasoning, ttft_ms
+    return text, reasoning, ttft_ms, resolved_model
 
 
 def _parse_embedding_payload(payload: object) -> tuple[list[list[float]], int | None]:

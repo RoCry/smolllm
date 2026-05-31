@@ -67,9 +67,12 @@ class LLMResponse:
     """High-level response container with provider metadata."""
 
     text: str
-    model: str  # e.g. "gemini/gemini-2.0-flash"
-    model_name: str  # e.g. "gemini-2.0-flash"
+    model: str  # requested spec, e.g. "gemini/gemini-2.0-flash"
+    model_name: str  # requested name, e.g. "gemini-2.0-flash"
     provider: str | None = None
+    # Server-reported model actually used, e.g. "jake/kimi-2.6". Differs from `model`
+    # when a proxy resolves an alias/fallback chain. None if upstream omits it.
+    resolved_model: str | None = None
     reasoning: str = ""
     usage: Usage | None = None
 
@@ -114,9 +117,11 @@ class StreamResponse:
     """
 
     stream: AsyncIterator[StreamChunk]
-    model: str  # e.g. "openrouter/google/gemini-2.5-flash"
-    model_name: str  # e.g. "gemini-2.5-flash"
+    model: str  # requested spec, e.g. "openrouter/google/gemini-2.5-flash"
+    model_name: str  # requested name, e.g. "gemini-2.5-flash"
     provider: str | None = None
+    # Server-reported model actually used (see LLMResponse.resolved_model).
+    resolved_model: str | None = None
     reasoning: str = ""
     usage: Usage | None = None
 
