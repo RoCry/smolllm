@@ -167,8 +167,10 @@ async def _prepare_llm_call(
     )
     client = prepare_client_and_auth(url, api_key)
 
+    effort_log = f" reasoning_effort={reasoning_effort}" if reasoning_effort is not None else ""
     logger.info(
-        f"Sending {url} model={model_name} api_key={preview_api_key(api_key)} ~tokens={estimate_tokens(str(data))}"
+        f"Sending {url} model={model_name}{effort_log} api_key={preview_api_key(api_key)} "
+        f"~tokens={estimate_tokens(str(data))}"
     )
 
     return url, data, client, provider, model_name, api_key
