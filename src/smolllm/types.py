@@ -75,6 +75,9 @@ class LLMResponse:
     resolved_model: str | None = None
     reasoning: str = ""
     usage: Usage | None = None
+    # OpenAI-style stop reason: "stop" (natural), "length" (hit cap), etc.
+    # None when the upstream omitted it.
+    finish_reason: str | None = None
 
     @override
     def __str__(self) -> str:
@@ -124,6 +127,8 @@ class StreamResponse:
     resolved_model: str | None = None
     reasoning: str = ""
     usage: Usage | None = None
+    # OpenAI-style stop reason of the underlying stream (see LLMResponse.finish_reason).
+    finish_reason: str | None = None
 
     def __aiter__(self) -> AsyncIterator[StreamChunk]:
         return self

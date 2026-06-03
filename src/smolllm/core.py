@@ -16,7 +16,7 @@ from .log import logger
 from .metrics import estimate_tokens, format_metrics
 from .providers import Provider, parse_model_spec, parse_model_string
 from .request import prepare_client_and_auth, prepare_embedding_request_data, prepare_request_data
-from .stream import decode_sse_chunk, extract_delta, extract_model
+from .stream import decode_sse_chunk, extract_delta, extract_finish_reason, extract_model
 from .types import (
     EmbedResponse,
     Hook,
@@ -238,6 +238,25 @@ def _extract_text_from_response(payload: object) -> tuple[str, str]:
     return content, reasoning
 
 
+def _is_truncated(finish_reason: str | None, *, has_content: bool, stream: bool) -> bool:
+    """Whether a response was cut short rather than completing naturally.
+
+    - ``finish_reason == "length"``: the provider hit the output-token cap.
+    - streaming with content but no terminal ``finish_reason``: the SSE stream
+      ended without its mandatory final frame, i.e. the connection dropped or the
+      upstream terminated the stream early.
+
+    A non-streaming body arrives as one complete JSON object, so a missing
+    ``finish_reason`` there is not evidence of truncation. Empty responses are
+    handled separately by the empty-response check.
+    """
+    if not has_content:
+        return False
+    if finish_reason == "length":
+        return True
+    return stream and finish_reason is None
+
+
 async def ask_llm(
     prompt: PromptType,
     *,
@@ -307,11 +326,12 @@ async def ask_llm(
 
             reasoning = ""
             resolved_model: str | None = None
+            finish_reason: str | None = None
             async with client:
                 if stream:
                     async with client.stream("POST", url, json=data, timeout=timeout) as response:
                         await _handle_http_error(response)
-                        resp, reasoning, ttft_ms, resolved_model = await _process_stream_response(
+                        resp, reasoning, ttft_ms, resolved_model, finish_reason = await _process_stream_response(
                             response, handler, start_time
                         )
                 else:
@@ -321,6 +341,7 @@ async def ask_llm(
                     payload = response.json()
                     resp, reasoning = _extract_text_from_response(payload)
                     resolved_model = extract_model(payload)
+                    finish_reason = extract_finish_reason(payload) if isinstance(payload, dict) else None
                     if handler is not None:
                         from .types import StreamChunk
 
@@ -328,6 +349,8 @@ async def ask_llm(
 
             if not resp and not reasoning:
                 raise ValueError(f"Received empty response from model {m}")
+            if _is_truncated(finish_reason, has_content=bool(resp or reasoning), stream=stream):
+                raise StreamError(f"Truncated response from model {m} (finish_reason={finish_reason})")
             if remove_backticks:
                 resp = strip_backticks(resp)
 
@@ -357,6 +380,7 @@ async def ask_llm(
                 resolved_model=resolved_model,
                 reasoning=reasoning,
                 usage=usage,
+                finish_reason=finish_reason,
             )
         except Exception as e:
             last_error = e
@@ -425,6 +449,7 @@ async def stream_llm(
             accumulated_content: list[str] = []
             accumulated_reasoning: list[str] = []
             resolved_model: str | None = None
+            finish_reason: str | None = None
             attempt_provider = ""
             attempt_model_spec = m
             attempt_model_name = ""
@@ -465,6 +490,8 @@ async def stream_llm(
                                     continue
                                 if resolved_model is None:
                                     resolved_model = extract_model(raw)
+                                if (reason := extract_finish_reason(raw)) is not None:
+                                    finish_reason = reason
                                 if chunk := extract_delta(raw):
                                     chunk = think_filter.feed(chunk)
                                     if chunk:
@@ -518,6 +545,7 @@ async def stream_llm(
                     sr.provider = provider.name
                     sr.resolved_model = resolved_model
                     sr.usage = usage
+                    sr.finish_reason = finish_reason
                 if hook is not None:
                     hook(RequestEvent(usage=usage, error=None, timestamp=time.time()))
                 return  # Stream completed successfully
@@ -563,10 +591,11 @@ async def _process_stream_response(
     response: httpx.Response,
     stream_handler: StreamHandler | None,
     start_time: float,
-) -> tuple[str, str, int | None, str | None]:
-    """Returns (text, reasoning, ttft_ms, resolved_model)."""
+) -> tuple[str, str, int | None, str | None, str | None]:
+    """Returns (text, reasoning, ttft_ms, resolved_model, finish_reason)."""
     first_token_time: float | None = None
     resolved_model: str | None = None
+    finish_reason: str | None = None
     think_filter = ThinkTagFilter()
     with ResponseDisplay(stream_handler) as display:
         async for line in response.aiter_lines():
@@ -575,6 +604,8 @@ async def _process_stream_response(
                 continue
             if resolved_model is None:
                 resolved_model = extract_model(raw)
+            if (reason := extract_finish_reason(raw)) is not None:
+                finish_reason = reason
             if chunk := extract_delta(raw):
                 chunk = think_filter.feed(chunk)
                 if chunk:
@@ -590,7 +621,7 @@ async def _process_stream_response(
     if first_token_time is not None:
         ttft_ms = max(0, int((first_token_time - start_time) * 1000))
 
-    return text, reasoning, ttft_ms, resolved_model
+    return text, reasoning, ttft_ms, resolved_model, finish_reason
 
 
 def _parse_embedding_payload(payload: object) -> tuple[list[list[float]], int | None]:

@@ -75,6 +75,25 @@ def decode_sse_chunk(line: str) -> dict[str, object] | None:
     return chunk
 
 
+def extract_finish_reason(payload: Mapping[str, object]) -> str | None:
+    """Read ``choices[0].finish_reason`` from a decoded chunk or full response.
+
+    Works for both streaming chunks and non-streaming bodies (both carry it at the
+    same path). Returns None when absent or null — i.e. content chunks mid-stream,
+    or a stream that ended without its mandatory terminal finish_reason frame.
+    """
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return None
+    choice = choices[0]
+    if not isinstance(choice, Mapping):
+        return None
+    finish_reason = choice.get("finish_reason")
+    if isinstance(finish_reason, str) and finish_reason:
+        return finish_reason
+    return None
+
+
 def extract_model(payload: object) -> str | None:
     """Read the upstream-reported model from a decoded chunk/response dict.
 
