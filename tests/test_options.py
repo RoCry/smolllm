@@ -47,6 +47,34 @@ def test_temperature_and_top_p_together() -> None:
     assert data["top_p"] == 0.95
 
 
+def test_common_generation_params_passed_through_to_payload() -> None:
+    _, data = prepare_request_data(
+        "hi",
+        None,
+        "test-model",
+        "openai",
+        "https://api.openai.com",
+        max_tokens=128,
+        stop=["END", "STOP"],
+        seed=42,
+    )
+    assert data["max_tokens"] == 128
+    assert data["stop"] == ["END", "STOP"]
+    assert data["seed"] == 42
+
+
+def test_stop_string_passed_through_to_payload() -> None:
+    _, data = prepare_request_data(
+        "hi",
+        None,
+        "test-model",
+        "openai",
+        "https://api.openai.com",
+        stop="END",
+    )
+    assert data["stop"] == "END"
+
+
 def test_temperature_default_omitted() -> None:
     _, data = prepare_request_data("hi", None, "m", "openai", "https://api.openai.com")
     assert "temperature" not in data
@@ -77,6 +105,16 @@ def test_top_p_in_range_accepted(good: float) -> None:
     assert data["top_p"] == good
 
 
+def test_max_tokens_must_be_positive() -> None:
+    with pytest.raises(ValueError, match="max_tokens"):
+        prepare_request_data("hi", None, "m", "openai", "https://api.openai.com", max_tokens=0)
+
+
+def test_stop_entries_must_be_non_empty() -> None:
+    with pytest.raises(ValueError, match="stop entries"):
+        prepare_request_data("hi", None, "m", "openai", "https://api.openai.com", stop=["END", ""])
+
+
 def test_preview_api_key_truncates_long_keys() -> None:
     assert preview_api_key("sk-1234567890ab") == "sk-12...90ab"
 
@@ -104,6 +142,7 @@ def test_usage_dataclass_shape() -> None:
     assert usage.output_tokens == 20
     assert usage.duration_ms == 123
     assert usage.ttft_ms is None
+    assert usage.estimated is True
 
 
 def test_request_event_dataclass_shape() -> None:

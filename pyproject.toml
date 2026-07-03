@@ -27,9 +27,6 @@ dependencies = [
 Homepage = "https://github.com/RoCry/smolllm"
 Repository = "https://github.com/RoCry/smolllm.git"
 
-[project.scripts]
-smolllm = "smolllm:main"
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -58,4 +55,3 @@ line-length = 120
 
 [tool.basedpyright]
 include = ["src"]
-

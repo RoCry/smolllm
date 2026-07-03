@@ -113,7 +113,7 @@ PROVIDER_CONFIG = {
         "base_url": "https://api.lkeap.cloud.tencent.com",
     },
     "together": {
-        "base_url": "https://api.tohgether.xyz",
+        "base_url": "https://api.together.xyz",
     },
     "xirang": {
         "base_url": "https://wishub-x1.ctyun.cn",

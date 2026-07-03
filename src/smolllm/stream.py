@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, MutableMapping
 from typing import cast
 
 from .log import logger
@@ -39,6 +39,23 @@ def extract_delta(chunk: Mapping[str, object]) -> StreamChunk | None:
     if not content and not reasoning:
         return None
     return StreamChunk(content=content, reasoning=reasoning)
+
+
+def update_usage(chunk: Mapping[str, object], usage: MutableMapping[str, int]) -> None:
+    """Merge token counts from a decoded chunk's ``usage`` object into ``usage``.
+
+    Providers may split prompt/completion counts across chunks, so fields merge
+    individually rather than replacing the whole mapping.
+    """
+    usage_obj = chunk.get("usage")
+    if not isinstance(usage_obj, Mapping):
+        return
+    prompt_tokens = usage_obj.get("prompt_tokens")
+    completion_tokens = usage_obj.get("completion_tokens")
+    if isinstance(prompt_tokens, int):
+        usage["prompt_tokens"] = prompt_tokens
+    if isinstance(completion_tokens, int):
+        usage["completion_tokens"] = completion_tokens
 
 
 def decode_sse_chunk(line: str) -> dict[str, object] | None:
@@ -107,7 +124,11 @@ def extract_model(payload: object) -> str | None:
     return None
 
 
-async def process_chunk_line(line: str) -> StreamChunk | None:
+async def process_chunk_line(line: str, *, usage: MutableMapping[str, int] | None = None) -> StreamChunk | None:
     """Process a single SSE line, returning a StreamChunk or None."""
     chunk = decode_sse_chunk(line)
-    return extract_delta(chunk) if chunk is not None else None
+    if chunk is None:
+        return None
+    if usage is not None:
+        update_usage(chunk, usage)
+    return extract_delta(chunk)

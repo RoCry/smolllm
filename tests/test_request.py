@@ -28,6 +28,20 @@ def test_prepare_request_data_defaults_stream_true() -> None:
         "https://api.openai.com",
     )
     assert data["stream"] is True
+    assert data["stream_options"] == {"include_usage": True}
+
+
+def test_prepare_request_data_can_omit_stream_usage_options() -> None:
+    _, data = prepare_request_data(
+        "hi",
+        None,
+        "test-model",
+        "openai",
+        "https://api.openai.com",
+        include_stream_usage=False,
+    )
+    assert data["stream"] is True
+    assert "stream_options" not in data
 
 
 def test_prepare_request_data_with_reasoning_effort() -> None:

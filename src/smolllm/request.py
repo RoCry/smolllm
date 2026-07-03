@@ -59,6 +59,10 @@ def _prepare_openai_request(
     reasoning_effort: str | None,
     temperature: float | None,
     top_p: float | None,
+    max_tokens: int | None,
+    stop: str | Sequence[str] | None,
+    seed: int | None,
+    include_stream_usage: bool,
 ) -> dict[str, object]:
     messages: list[Message] = []
     if system_prompt:
@@ -95,6 +99,14 @@ def _prepare_openai_request(
         payload["temperature"] = temperature
     if top_p is not None:
         payload["top_p"] = top_p
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
+    if stop is not None:
+        payload["stop"] = stop
+    if seed is not None:
+        payload["seed"] = seed
+    if stream and include_stream_usage:
+        payload["stream_options"] = {"include_usage": True}
     return payload
 
 
@@ -133,12 +145,28 @@ def prepare_request_data(
     reasoning_effort: str | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
+    max_tokens: int | None = None,
+    stop: str | Sequence[str] | None = None,
+    seed: int | None = None,
+    include_stream_usage: bool = True,
 ) -> tuple[str, dict[str, object]]:
     """Prepare request URL, data and headers for the API call"""
     if temperature is not None and not 0.0 <= temperature <= 2.0:
         raise ValueError(f"temperature must be in [0, 2]; got {temperature}")
     if top_p is not None and not 0.0 <= top_p <= 1.0:
         raise ValueError(f"top_p must be in [0, 1]; got {top_p}")
+    if max_tokens is not None and max_tokens <= 0:
+        raise ValueError("max_tokens must be a positive integer")
+    if isinstance(stop, str):
+        if not stop:
+            raise ValueError("stop must not be empty")
+    elif stop is not None:
+        stop_items = list(stop)
+        if not stop_items:
+            raise ValueError("stop must contain at least one entry")
+        if any(not isinstance(item, str) or not item for item in stop_items):
+            raise ValueError("stop entries must be non-empty strings")
+        stop = stop_items
     image_path_list = list(image_paths) if image_paths else []
     normalized_reasoning_effort = _normalize_reasoning_effort(reasoning_effort, provider_name=provider_name)
     url = _build_endpoint_url(base_url, provider_name, "chat/completions")
@@ -151,6 +179,10 @@ def prepare_request_data(
         normalized_reasoning_effort,
         temperature,
         top_p,
+        max_tokens,
+        stop,
+        seed,
+        include_stream_usage,
     )
     return url, data
 

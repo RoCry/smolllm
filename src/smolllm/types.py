@@ -48,6 +48,7 @@ class Usage:
     output_tokens: int
     duration_ms: int
     ttft_ms: int | None = None
+    estimated: bool = True
 
 
 @dataclass(slots=True)
@@ -174,6 +175,9 @@ class LLMFunction(Protocol):
         reasoning_effort: str | None = ...,
         temperature: float | None = ...,
         top_p: float | None = ...,
+        max_tokens: int | None = ...,
+        stop: str | Sequence[str] | None = ...,
+        seed: int | None = ...,
         hook: Hook | None = ...,
     ) -> LLMResponse:
         """Protocol describing the callable shape expected for LLM functions."""

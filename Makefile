@@ -11,10 +11,10 @@ clean:
 	rm -rf dist/ build/ *.egg-info/
 
 install-dev: clean
-	uv pip sync --all-extras --dev
+	uv sync --all-extras --dev
 
 build: install-dev
-	python -m build
+	uv run python -m build
 
 test:
 	uv run pytest -s -v tests/*

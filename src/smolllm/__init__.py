@@ -2,7 +2,8 @@
 smolllm - A minimal LLM library for easy interaction with various LLM providers
 """
 
-from .core import ask_llm, embed_llm, stream_llm
+from .core import ask_llm, stream_llm
+from .embeddings import embed_llm
 from .types import (
     EmbedResponse,
     Hook,

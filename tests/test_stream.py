@@ -56,6 +56,15 @@ async def test_process_chunk_line_raises_on_error_without_message() -> None:
         await process_chunk_line(line)
 
 
+@pytest.mark.asyncio
+async def test_process_chunk_line_updates_usage_from_usage_chunk() -> None:
+    usage: dict[str, int] = {}
+    line = 'data: {"choices":[],"usage":{"prompt_tokens":11,"completion_tokens":7,"total_tokens":18}}'
+    result = await process_chunk_line(line, usage=usage)
+    assert result is None
+    assert usage == {"prompt_tokens": 11, "completion_tokens": 7}
+
+
 def test_stream_error_partial() -> None:
     err = StreamError("fail", partial="abc")
     assert err.partial == "abc"

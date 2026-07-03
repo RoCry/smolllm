@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-SmolLLM is a minimal Python library for interacting with 45+ LLM providers, featuring automatic API key load balancing and streaming responses. The library provides a unified interface (`ask_llm` and `stream_llm`) for all providers.
+SmolLLM is a minimal Python library for interacting with 41 LLM providers, featuring automatic API key load balancing and streaming responses. The library provides a unified interface (`ask_llm` and `stream_llm`) for all providers.
 
 ## Development Commands
 
@@ -45,15 +45,15 @@ ruff format src/            # Format code
 - `src/smolllm/providers.py` - Provider management and configuration loading
 - `src/smolllm/balancer.py` - API key load balancing across multiple keys/endpoints
 - `src/smolllm/stream.py` - Streaming response handling with async generators
-- `src/smolllm/types.py` - Type definitions (Provider, LLMConfig, Message types)
+- `src/smolllm/types.py` - Type definitions (Provider, Message, response, streaming, and usage types)
 - `src/smolllm/provider_config.py` - Provider endpoint configuration management
-- `src/smolllm/request.py` - HTTP request handling and retry logic
+- `src/smolllm/request.py` - HTTP request payload and endpoint construction
 
 ### Key Design Patterns
 1. **Provider Format**: All models use `provider/model_name` format (e.g., `openai/gpt-4`)
 2. **Environment Variables**: API keys follow `{PROVIDER}_API_KEY` pattern, base URLs follow `{PROVIDER}_BASE_URL`
 3. **Load Balancing**: Supports multiple API keys per provider with comma separation
-4. **Configuration**: Provider configurations stored in `providers.json` with 45+ providers
+4. **Configuration**: Provider configurations stored in `providers.json` with 41 providers
 
 ### Testing Approach
 - Tests located in `/tests/` directory
