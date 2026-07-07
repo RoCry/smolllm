@@ -250,7 +250,9 @@ async def ask_llm(
                 response_text=resp + reasoning,
             )
 
-            logger.info(format_metrics(model_name, input_tokens, output_tokens, total_time, ttft_ms))
+            logger.info(
+                format_metrics(model_name, input_tokens, output_tokens, total_time, ttft_ms, estimated=estimated)
+            )
 
             usage = Usage(
                 provider=provider.name,
@@ -437,7 +439,11 @@ async def stream_llm(
                     ttft_ms: int | None = None
                     if first_token_time is not None:
                         ttft_ms = max(0, int((first_token_time - start_time) * 1000))
-                    logger.info(format_metrics(model_name, input_tokens, output_tokens, total_time, ttft_ms))
+                    logger.info(
+                        format_metrics(
+                            model_name, input_tokens, output_tokens, total_time, ttft_ms, estimated=estimated
+                        )
+                    )
                 else:
                     raise StreamError("Stream completed without content")
 

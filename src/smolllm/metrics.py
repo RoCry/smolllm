@@ -12,6 +12,8 @@ def format_metrics(
     output_tokens: int,
     total_time: float,
     ttft_ms: int | None = None,
+    *,
+    estimated: bool = True,
 ) -> str:
     """Format metrics for logging with emojis.
 
@@ -21,6 +23,7 @@ def format_metrics(
         output_tokens: Number of output tokens
         total_time: Total time in seconds
         ttft_ms: Time to first token in milliseconds (optional, for streaming)
+        estimated: Whether token counts are heuristic estimates (shown with ~)
 
     Returns:
         Formatted metrics string with emojis
@@ -28,7 +31,8 @@ def format_metrics(
     total_tokens = input_tokens + output_tokens
     tok_per_sec = int(output_tokens / total_time) if total_time > 0 else 0
 
-    metrics = f"📊{model_name} {total_tokens}tok (↑{input_tokens} ↓{output_tokens})"
+    approx = "~" if estimated else ""
+    metrics = f"📊{model_name} {approx}{total_tokens}tok (↑{input_tokens} ↓{output_tokens})"
     if ttft_ms is not None:
         metrics += f" | 🚀{_format_time(ttft_ms)}"
 
