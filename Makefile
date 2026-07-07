@@ -1,8 +1,12 @@
 .PHONY: clean build install-dev test-release manual-release bump-patch bump-minor bump-major
 
+UV_RUN ?= uv run
+SMOLLLM_ENV_FILE ?= $(HOME)/.env.smolllm
+SMOLLLM_RUN = $(UV_RUN) --env-file $(SMOLLLM_ENV_FILE)
+
 # Helper functions
 define get_version
-$(shell uv run python -c "from src.smolllm import __version__; print(__version__)")
+$(shell $(UV_RUN) python -c "from src.smolllm import __version__; print(__version__)")
 endef
 
 VERSION := $(call get_version)
@@ -14,10 +18,10 @@ install-dev: clean
 	uv sync --all-extras --dev
 
 build: install-dev
-	uv run python -m build
+	$(UV_RUN) python -m build
 
 test:
-	uv run pytest -s -v tests/*
+	$(UV_RUN) pytest -s -v tests/*
 
 # Manual release commands
 test-release: build
@@ -42,16 +46,21 @@ define do_version_bump
 		echo "Error: Could not determine current version"; \
 		exit 1; \
 	fi
+	@if [ ! -f "$(SMOLLLM_ENV_FILE)" ]; then \
+		echo "Error: SMOLLLM_ENV_FILE not found: $(SMOLLLM_ENV_FILE)"; \
+		echo "Set SMOLLLM_ENV_FILE=/path/to/.env or create $(SMOLLLM_ENV_FILE)"; \
+		exit 1; \
+	fi
 	@echo "Current version: $(VERSION)"
 	@read -p "Are you sure you want to bump $(1) version? [y/N] " confirm && [ $$confirm = "y" ]
-	uv run tools/bump_version.py $(1)
-	@NEW_VERSION=$$(uv run python -c "from src.smolllm import __version__; print(__version__)") && \
+	$(UV_RUN) tools/bump_version.py $(1)
+	@NEW_VERSION=$$($(UV_RUN) python -c "from src.smolllm import __version__; print(__version__)") && \
 	if [ -z "$$NEW_VERSION" ]; then \
 		echo "Error: Could not determine new version"; \
 		exit 1; \
 	fi && \
 	echo "Version bumped: $(VERSION) -> $$NEW_VERSION" && \
-	uv run examples/simple.py && echo "\nTest passed\n" && \
+	$(SMOLLLM_RUN) examples/simple.py && echo "\nTest passed\n" && \
 	read -p "Do you want to commit, tag and push? [y/N] " confirm && [ $$confirm = "y" ] && \
 	git commit -am "chore: bump version to $$NEW_VERSION" && \
 	git tag -m "Release v$$NEW_VERSION" v$$NEW_VERSION && \
@@ -69,4 +78,4 @@ bump-major:
 
 # Development commands
 update-providers:
-	uv run tools/update_providers.py
+	$(UV_RUN) tools/update_providers.py
