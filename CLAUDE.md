@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 SmolLLM is a minimal Python library for interacting with 41 LLM providers, featuring automatic API key load balancing and streaming responses. The library provides a unified interface (`ask_llm` and `stream_llm`) for all providers.
 
+## Design Philosophy
+
+**Extreme minimalism.** Scope is frozen at chat + embeddings over the OpenAI-compatible wire protocol; no new API surface without a real in-house consumer ([ADR-0001](docs/adr/0001-extreme-minimalism.md)). Usage stops at tokens; cost is the caller's concern ([ADR-0002](docs/adr/0002-token-only-accounting.md)). Before proposing any new feature, read [docs/DEFERRED.md](docs/DEFERRED.md) — tool calling, `extra_body`, and JSON mode already have agreed designs recorded there, deliberately unimplemented. Domain glossary: [CONTEXT.md](CONTEXT.md).
+
 ## Development Commands
 
 ### Testing

@@ -1,0 +1,42 @@
+# Deferred designs
+
+Conclusions from a 2026-07-11 design review. Each feature passed review but has **no real in-house consumer today**, so per [ADR-0001](adr/0001-extreme-minimalism.md) it stays unimplemented. When a real use case appears, implement per the recorded design — the thinking is done.
+
+## `extra_body` escape hatch
+
+**Status**: deferred — no current caller needs unmodeled request fields.
+
+**Design**:
+- Python: `extra_body: dict[str, Any] | None = None` on `ask_llm`/`stream_llm`; Go: `WithExtraBody(map[string]any)`.
+- Shallow-merged into the payload **last** — caller wins over library defaults.
+- Reserved keys fail fast (`ValueError`/panic): `stream`, `stream_options`, `messages`, `model` — library machinery (stream parser, usage collection, routing) depends on them.
+- No `extra_headers` until a real header-based need appears (YAGNI).
+- Name matches the openai SDK's `extra_body` — zero learning curve.
+
+**Why it's first in line**: ~20 LOC; permanently ends pressure to model new request fields (`seed`, `service_tier`, `response_format`, provider-private params).
+
+## Tool calling
+
+**Status**: deferred — nothing in-house issues tool calls through smolllm, so it cannot be tested or experienced for real.
+
+**Design** (response-side only; request side rides `extra_body={"tools": [...]}` — signatures stay untouched):
+- Accept `tool`-role messages and assistant messages carrying `tool_calls` (Go `Prompt.Validate()` currently rejects them; must be relaxed).
+- Surface raw `tool_calls` (list of dicts — no typed ToolCall class) plus `finish_reason` on responses.
+- Streaming: accumulate tool-call deltas internally, expose after stream end; no partial-JSON pushes to handlers.
+- Empty-content guard fix: a response with `tool_calls` and empty content is legal (today it raises).
+- **No agentic loop** — the caller executes tools and appends messages. Because smolllm speaks only the OpenAI-compat wire, the assistant turn replays losslessly; clients with native Gemini/Anthropic transports must reconstruct replay messages to preserve opaque state (thought signatures) — smolllm is immune by architecture.
+- **No prompt-based tool emulation** (sentinel protocols + injected system prompts for tool-less models): a whole subsystem with poor ROI now that mainstream models have native tools.
+- **No JSON-schema normalization** (e.g. auto-injecting `items:{}` into array schemas some providers reject); fail fast — the provider error is clear enough.
+- smolllm-server: currently hard-rejects `tools`; after Go support, forward them (emitting tool_calls at stream end is acceptable to mainstream OpenAI clients).
+
+## JSON mode / `response_format`
+
+**Status**: absorbed — no implementation ever needed; former roadmap item deleted.
+
+`extra_body={"response_format": {...}}` is complete support once the escape hatch exists; the response side is unchanged (content is still text). Ship a docs example only. **Never auto-repair model JSON** — repair heuristics (balancing brace counts on truncated output) fabricate valid-but-wrong data; fence-stripping (`remove_backticks`) is the maximum.
+
+## Cost accounting
+
+**Status**: delegated to callers — see [ADR-0002](adr/0002-token-only-accounting.md).
+
+When smolllm-server implements it: LiteLLM `model_prices` JSON as the price source (fetched/vendored, never hand-maintained); fail closed (unknown model → null cost, never guessed); propagate the `~` estimation marker from token counts to cost; v1 prices input/output rates only (no cache/reasoning tiers).
