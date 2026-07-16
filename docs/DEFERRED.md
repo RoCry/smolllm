@@ -35,8 +35,16 @@ Conclusions from a 2026-07-11 design review. Each feature passed review but has 
 
 `extra_body={"response_format": {...}}` is complete support once the escape hatch exists; the response side is unchanged (content is still text). Ship a docs example only. **Never auto-repair model JSON** — repair heuristics (balancing brace counts on truncated output) fabricate valid-but-wrong data; fence-stripping (`remove_backticks`) is the maximum.
 
+## Health-aware balancer
+
+**Status**: deferred — `/stats` failures data does not yet show a dead-key pattern.
+
+**Design**: add a failure-cooldown circuit breaker to the key/URL balancer, temporarily removing failing pairs from selection. Implement only when `/stats` per-bucket failure data shows a dead-key pattern; that evidence is the un-defer trigger.
+
+Personal key pools are small, so cooldown could empty the whole pool; the required balancer state machine is not small relative to the library; and 429 already falls through to the next model, covering the common quota-exhaustion case.
+
 ## Cost accounting
 
-**Status**: delegated to callers — see [ADR-0002](adr/0002-token-only-accounting.md).
+**Status**: step 2 — delegated to callers; unchanged per [ADR-0002](adr/0002-token-only-accounting.md).
 
-When smolllm-server implements it: LiteLLM `model_prices` JSON as the price source (fetched/vendored, never hand-maintained); fail closed (unknown model → null cost, never guessed); propagate the `~` estimation marker from token counts to cost; v1 prices input/output rates only (no cache/reasoning tiers).
+The smolllm-server token-only usage ledger (`/stats`) is the substrate cost accounting would sit on. When cost is implemented: LiteLLM `model_prices` JSON as the price source (fetched/vendored, never hand-maintained); fail closed (unknown model → null cost, never guessed); propagate the `~` estimation marker from token counts to cost; v1 prices input/output rates only (no cache/reasoning tiers).
