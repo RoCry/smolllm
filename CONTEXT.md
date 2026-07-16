@@ -28,6 +28,9 @@ Token counts derived by heuristic when the provider omits usage; always marked (
 Model thinking text, kept in a channel separate from content.
 _Avoid_: mixing reasoning into content.
 
+**FinishReason**:
+Verbatim provider string explaining why generation ended; never normalized.
+
 **Request hook**:
 Per-attempt observation callback receiving usage or error; the library's only telemetry surface.
 
