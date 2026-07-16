@@ -45,6 +45,6 @@ Personal key pools are small, so cooldown could empty the whole pool; the requir
 
 ## Cost accounting
 
-**Status**: step 2 — delegated to callers; unchanged per [ADR-0002](adr/0002-token-only-accounting.md).
+**Status**: step 2 (cost layer after the token ledger) — delegated to callers; unchanged per [ADR-0002](adr/0002-token-only-accounting.md).
 
 The smolllm-server token-only usage ledger (`/stats`) is the substrate cost accounting would sit on. When cost is implemented: LiteLLM `model_prices` JSON as the price source (fetched/vendored, never hand-maintained); fail closed (unknown model → null cost, never guessed); propagate the `~` estimation marker from token counts to cost; v1 prices input/output rates only (no cache/reasoning tiers).
