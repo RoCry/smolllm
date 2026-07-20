@@ -21,6 +21,10 @@ Re-attempt of the *same* model after a transient failure. Distinct from fallback
 **Balancer pair**:
 One (API key, base URL) combination for a provider; the least-used pair is chosen per call.
 
+**Output budget**:
+The `max_tokens` cap a caller declares on completion length. Application knowledge — the library never injects one; unset means the provider's own default applies.
+_Avoid_: implying a library-side default exists.
+
 **Estimated usage**:
 Token counts derived by heuristic when the provider omits usage; always marked (`~` prefix, `Estimated` flag).
 

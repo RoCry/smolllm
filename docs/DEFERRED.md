@@ -35,6 +35,16 @@ Conclusions from a 2026-07-11 design review. Each feature passed review but has 
 
 `extra_body={"response_format": {...}}` is complete support once the escape hatch exists; the response side is unchanged (content is still text). Ship a docs example only. **Never auto-repair model JSON** — repair heuristics (balancing brace counts on truncated output) fabricate valid-but-wrong data; fence-stripping (`remove_backticks`) is the maximum.
 
+## `SMOLLLM_MAX_TOKENS` env default
+
+**Status**: deferred — exactly one app has been bitten (mindmap truncated at a relay-injected 4096 default, rescued by chain fallback at the cost of a wasted full-length attempt); it now declares `max_tokens` itself.
+
+**Context** (2026-07 survey of primary sources): the OpenAI-compat ecosystem treats max output tokens as optional and never injected — official SDKs and proxies (openai-python, LiteLLM, OpenRouter, one-api) pass it through untouched. The only injection point anywhere is the OpenAI→Anthropic conversion boundary, where the target API *requires* the field (one-api injects 4096, new-api 8192). Provider defaults when the field is omitted vary wildly (Kimi K3: 131072; DeepSeek V3-era: 4096; some relays: 4096). smolllm follows the ecosystem: the library and smolllm-server never invent a value. Output budget is application knowledge — the library cannot know whether truncation is acceptable, and a safe universal value would need a per-model capability catalog (out of scope per [ADR-0001](adr/0001-extreme-minimalism.md)). Oversized values are not free either: strict providers 400 when the value exceeds the model's output cap or when `input + max_tokens` exceeds the context window.
+
+**Design**: env var `SMOLLLM_MAX_TOKENS` read as the default for an unset `max_tokens`; an explicit argument always wins. Go reads the same name during option resolution. Opt-in via user env only — never a hardcoded library constant.
+
+**Un-defer trigger**: a second in-house app wastes a real run on `finish_reason="length"` truncation.
+
 ## Health-aware balancer
 
 **Status**: deferred — `/stats` failures data does not yet show a dead-key pattern.
