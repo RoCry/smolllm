@@ -58,3 +58,19 @@ def test_ask_llm_import_does_not_load_embeddings_or_rich_display() -> None:
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_type_import_does_not_load_http_client_or_terminal_stack() -> None:
+    result = _run_in_clean_interpreter(
+        """
+        import sys
+
+        from smolllm.types import Message
+
+        assert Message is not None
+        assert "httpx" not in sys.modules
+        assert not any(name == "rich" or name.startswith("rich.") for name in sys.modules)
+        """
+    )
+
+    assert result.returncode == 0, result.stderr

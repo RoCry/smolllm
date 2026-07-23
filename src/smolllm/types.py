@@ -2,9 +2,20 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import dataclass
-from typing import Literal, Protocol, TypedDict, override
+from importlib import import_module
+from typing import TYPE_CHECKING, Literal, Protocol, TypedDict, override
 
-import httpx
+if TYPE_CHECKING:
+    import httpx
+else:
+
+    class _LazyHttpx:
+        def __getattr__(self, name: str) -> object:
+            module = import_module("httpx")
+            globals()["httpx"] = module
+            return getattr(module, name)
+
+    httpx = _LazyHttpx()
 
 ModelInput = str | Sequence[str] | set[str] | dict[str, float | int]
 
