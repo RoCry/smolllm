@@ -1,10 +1,6 @@
 import asyncio
 
-from dotenv import load_dotenv
-
 from smolllm import Message, stream_llm
-
-_ = load_dotenv()
 
 prompt: list[Message] = [
     {"role": "user", "content": "Hi, I'm John. Please response as short as possible."},

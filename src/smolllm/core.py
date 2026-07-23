@@ -8,7 +8,6 @@ from time import perf_counter
 import httpx
 
 from .balancer import balancer
-from .embeddings import embed_llm as embed_llm
 from .env import get_env_var
 from .http_stream import handle_http_error, iter_stream_lines, process_stream_response, usage_tokens_from_payload
 from .log import logger
@@ -17,7 +16,7 @@ from .model_selector import RandomSelector as RandomSelector
 from .model_selector import SequentialSelector as SequentialSelector
 from .model_selector import create_selector
 from .providers import Provider, parse_model_spec, parse_model_string
-from .request import prepare_client_and_auth, prepare_request_data
+from .request import prepare_auth_headers, prepare_client_and_auth, prepare_request_data
 from .response import extract_text_from_response as _extract_text_from_response
 from .stream import decode_sse_chunk, extract_delta, extract_finish_reason, extract_model, update_usage
 from .types import (
@@ -52,6 +51,7 @@ async def _prepare_llm_call(
     stop: str | Sequence[str] | None = None,
     seed: int | None = None,
     include_stream_usage: bool = True,
+    client: httpx.AsyncClient | None = None,
 ) -> tuple[str, dict[str, object], httpx.AsyncClient, Provider, str, str]:
     """Common setup logic for LLM API calls."""
     if not model:
@@ -81,15 +81,14 @@ async def _prepare_llm_call(
         seed=seed,
         include_stream_usage=include_stream_usage,
     )
-    client = prepare_client_and_auth(url, api_key)
-
     effort_log = f" reasoning_effort={reasoning_effort}" if reasoning_effort is not None else ""
     logger.info(
         f"Sending {url} model={model_name}{effort_log} api_key={preview_api_key(api_key)} "
         f"~tokens={estimate_tokens(str(data))}"
     )
 
-    return url, data, client, provider, model_name, api_key
+    http_client = client if client is not None else prepare_client_and_auth(url, api_key)
+    return url, data, http_client, provider, model_name, api_key
 
 
 def _resolve_usage_tokens(
@@ -148,6 +147,7 @@ async def ask_llm(
     stop: str | Sequence[str] | None = None,
     seed: int | None = None,
     hook: Hook | None = None,
+    client: httpx.AsyncClient | None = None,
 ) -> LLMResponse:
     """
     Args:
@@ -163,6 +163,7 @@ async def ask_llm(
         max_tokens: Optional maximum number of output tokens
         stop: Optional stop sequence or stop sequence list
         seed: Optional deterministic sampling seed for providers that support it
+        client: Optional caller-owned reusable HTTP client. Injected clients remain open after the call.
 
     Returns:
         LLMResponse object containing the text response, model used, and provider
@@ -178,11 +179,12 @@ async def ask_llm(
         input_tokens = 0
         start_time = perf_counter()
         ttft_ms: int | None = None
+        owned_client: httpx.AsyncClient | None = None
         try:
             model_spec, effort_override = parse_model_spec(m)
             attempt_model_spec = model_spec
             effective_effort = effort_override if effort_override is not None else reasoning_effort
-            url, data, client, provider, model_name, used_api_key = await _prepare_llm_call(
+            url, data, http_client, provider, model_name, used_api_key = await _prepare_llm_call(
                 prompt,
                 system_prompt=system_prompt,
                 model=model_spec,
@@ -196,7 +198,10 @@ async def ask_llm(
                 max_tokens=max_tokens,
                 stop=stop,
                 seed=seed,
+                client=client,
             )
+            if client is None:
+                owned_client = http_client
             attempt_provider = provider.name
             attempt_model_name = model_name
             attempt_api_key = used_api_key
@@ -209,32 +214,38 @@ async def ask_llm(
             resolved_model: str | None = None
             finish_reason: str | None = None
             provider_usage: tuple[int | None, int | None] | None = None
-            async with client:
-                if stream:
-                    stream_usage: dict[str, int] = {}
-                    resp, reasoning, ttft_ms, resolved_model, finish_reason = await process_stream_response(
-                        iter_stream_lines(client, url, data, timeout),
-                        handler,
-                        start_time,
-                        usage=stream_usage,
-                    )
-                    prompt_tokens = stream_usage.get("prompt_tokens")
-                    completion_tokens = stream_usage.get("completion_tokens")
-                    if prompt_tokens is not None or completion_tokens is not None:
-                        provider_usage = (prompt_tokens, completion_tokens)
-                else:
-                    response = await client.post(url, json=data, timeout=timeout)
-                    await handle_http_error(response)
-                    await response.aread()
-                    payload = response.json()
-                    resp, reasoning = _extract_text_from_response(payload)
-                    resolved_model = extract_model(payload)
-                    finish_reason = extract_finish_reason(payload) if isinstance(payload, dict) else None
-                    provider_usage = usage_tokens_from_payload(payload)
-                    if handler is not None:
-                        from .types import StreamChunk
+            request_headers = prepare_auth_headers(used_api_key) if client is not None else None
+            if stream:
+                stream_usage: dict[str, int] = {}
+                resp, reasoning, ttft_ms, resolved_model, finish_reason = await process_stream_response(
+                    iter_stream_lines(http_client, url, data, timeout, headers=request_headers),
+                    handler,
+                    start_time,
+                    usage=stream_usage,
+                )
+                prompt_tokens = stream_usage.get("prompt_tokens")
+                completion_tokens = stream_usage.get("completion_tokens")
+                if prompt_tokens is not None or completion_tokens is not None:
+                    provider_usage = (prompt_tokens, completion_tokens)
+            else:
+                response = await http_client.post(
+                    url,
+                    json=data,
+                    timeout=timeout,
+                    headers=request_headers,
+                    auth=None,
+                )
+                await handle_http_error(response)
+                await response.aread()
+                payload = response.json()
+                resp, reasoning = _extract_text_from_response(payload)
+                resolved_model = extract_model(payload)
+                finish_reason = extract_finish_reason(payload) if isinstance(payload, dict) else None
+                provider_usage = usage_tokens_from_payload(payload)
+                if handler is not None:
+                    from .types import StreamChunk
 
-                        await handler(StreamChunk(content=resp, reasoning=reasoning))
+                    await handler(StreamChunk(content=resp, reasoning=reasoning))
 
             if not resp and not reasoning:
                 raise ValueError(f"Received empty response from model {m}")
@@ -295,6 +306,9 @@ async def ask_llm(
                 )
                 hook(RequestEvent(usage=fail_usage, error=e, timestamp=time.time()))
             continue
+        finally:
+            if owned_client is not None:
+                await owned_client.aclose()
     if last_error:
         raise last_error
     raise ValueError("No valid models found")
@@ -362,7 +376,7 @@ async def stream_llm(
                 model_spec, effort_override = parse_model_spec(m)
                 attempt_model_spec = model_spec
                 effective_effort = effort_override if effort_override is not None else reasoning_effort
-                url, data, client, provider, model_name, used_api_key = await _prepare_llm_call(
+                url, data, http_client, provider, model_name, used_api_key = await _prepare_llm_call(
                     prompt,
                     system_prompt=system_prompt,
                     model=model_spec,
@@ -387,8 +401,8 @@ async def stream_llm(
                 stream_usage: dict[str, int] = {}
 
                 try:
-                    async with client:
-                        async for line in iter_stream_lines(client, url, data, timeout):
+                    async with http_client:
+                        async for line in iter_stream_lines(http_client, url, data, timeout):
                             raw = decode_sse_chunk(line)
                             if raw is None:
                                 continue

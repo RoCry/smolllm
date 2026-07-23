@@ -5,7 +5,6 @@ from time import perf_counter
 
 import httpx
 
-from .display import ResponseDisplay
 from .log import logger
 from .stream import decode_sse_chunk, extract_delta, extract_finish_reason, extract_model, update_usage
 from .types import StreamHandler
@@ -53,9 +52,18 @@ async def iter_stream_lines(
     url: str,
     data: dict[str, object],
     timeout: float,
+    *,
+    headers: dict[str, str] | None = None,
 ) -> AsyncIterator[str]:
     try:
-        async with client.stream("POST", url, json=data, timeout=timeout) as response:
+        async with client.stream(
+            "POST",
+            url,
+            json=data,
+            timeout=timeout,
+            headers=headers,
+            auth=None,
+        ) as response:
             await handle_http_error(response)
             async for line in response.aiter_lines():
                 yield line
@@ -66,7 +74,14 @@ async def iter_stream_lines(
         logger.warning("Provider rejected stream_options; retrying stream without usage inclusion")
 
     retry_data = _without_stream_usage(data)
-    async with client.stream("POST", url, json=retry_data, timeout=timeout) as response:
+    async with client.stream(
+        "POST",
+        url,
+        json=retry_data,
+        timeout=timeout,
+        headers=headers,
+        auth=None,
+    ) as response:
         await handle_http_error(response)
         async for line in response.aiter_lines():
             yield line
@@ -80,6 +95,8 @@ async def process_stream_response(
     usage: dict[str, int] | None = None,
 ) -> tuple[str, str, int | None, str | None, str | None]:
     """Returns (text, reasoning, ttft_ms, resolved_model, finish_reason)."""
+    from .display import ResponseDisplay
+
     first_token_time: float | None = None
     resolved_model: str | None = None
     finish_reason: str | None = None

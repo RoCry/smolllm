@@ -1,11 +1,7 @@
 import argparse
 import asyncio
 
-from dotenv import load_dotenv
-
 from smolllm import LLMResponse, ask_llm
-
-_ = load_dotenv()
 
 
 def parse_args() -> argparse.Namespace:

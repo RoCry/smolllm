@@ -12,12 +12,8 @@ uv add "smolllm @ ../smolllm"
 ## Quick Start
 
 ```python
-from dotenv import load_dotenv
 import asyncio
 from smolllm import ask_llm
-
-# Load environment variables at your application startup
-load_dotenv()
 
 async def main():
     response = await ask_llm(
@@ -105,16 +101,9 @@ GEMINI_API_KEY=xxx,xxx2
 ANTHROPIC_API_KEY=sk-xxx
 ```
 
-2. Load environment variables before using SmolLLM:
-```python
-from dotenv import load_dotenv
-import os
-
-# Load at your application startup
-load_dotenv()
-
-# Now you can use SmolLLM
-from smolllm import ask_llm
+2. Load the file at the application/process boundary:
+```bash
+uv run --env-file .env app.py
 ```
 
 ## Tips

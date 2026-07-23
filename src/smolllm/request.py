@@ -223,19 +223,21 @@ def prepare_embedding_request_data(
     return url, payload
 
 
+def prepare_auth_headers(api_key: str) -> dict[str, str]:
+    return {
+        "content-type": "application/json",
+        "authorization": f"Bearer {api_key}",
+    }
+
+
 def prepare_client_and_auth(
     url: str,
     api_key: str,
 ) -> httpx.AsyncClient:
     """Prepare HTTP client and handle authentication"""
-    headers = {
-        "content-type": "application/json",
-        "authorization": f"Bearer {api_key}",
-    }
-
     unsecure = url.startswith("http://")
 
     # Let httpx pick the correct local address family. Forcing an IPv4 bind
     # breaks reachable HTTP endpoints on some networks, including `.local`
     # hosts discovered over mDNS.
-    return httpx.AsyncClient(headers=headers, verify=not unsecure)
+    return httpx.AsyncClient(headers=prepare_auth_headers(api_key), verify=not unsecure)

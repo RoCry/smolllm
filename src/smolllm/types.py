@@ -4,6 +4,8 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol, TypedDict, override
 
+import httpx
+
 ModelInput = str | Sequence[str] | set[str] | dict[str, float | int]
 
 
@@ -179,6 +181,7 @@ class LLMFunction(Protocol):
         stop: str | Sequence[str] | None = ...,
         seed: int | None = ...,
         hook: Hook | None = ...,
+        client: httpx.AsyncClient | None = ...,
     ) -> LLMResponse:
         """Protocol describing the callable shape expected for LLM functions."""
         ...
