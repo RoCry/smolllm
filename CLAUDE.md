@@ -14,24 +14,24 @@ SmolLLM is a minimal Python library for interacting with 41 LLM providers, featu
 
 ### Testing
 ```bash
-make test                    # Run all tests using pytest
+just test                    # Run all tests using pytest
 uv run pytest -s -v tests/*  # Run tests with verbose output
 ```
 
 ### Building and Release
 ```bash
-make build                   # Build the package
-make test-release           # Test release to Test PyPI
-make bump-patch             # Bump patch version (0.3.0 -> 0.3.1)
-make bump-minor             # Bump minor version (0.3.0 -> 0.4.0)
-make bump-major             # Bump major version (0.3.0 -> 1.0.0)
+just build                   # Build the package
+just test-release            # Test release to Test PyPI
+just bump-patch              # Bump patch version (0.3.0 -> 0.3.1)
+just bump-minor              # Bump minor version (0.3.0 -> 0.4.0)
+just bump-major              # Bump major version (0.3.0 -> 1.0.0)
 ```
 
 ### Development Setup
 ```bash
-make install-dev            # Install all development dependencies
-make clean                  # Clean build artifacts
-make update-providers       # Update provider configurations
+just install-dev             # Install all development dependencies
+just clean                   # Clean build artifacts
+just update-providers        # Update provider configurations
 ```
 
 ### Linting
@@ -66,7 +66,7 @@ ruff format src/            # Format code
 
 ### Version Management
 - Version is stored in `src/smolllm/__init__.py`
-- Use Makefile commands for version bumping which automatically:
+- Use justfile recipes for version bumping which automatically:
   - Updates version
   - Runs tests
   - Creates git commit and tag
