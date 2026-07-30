@@ -45,6 +45,14 @@ Conclusions from a 2026-07-11 design review. Each feature passed review but has 
 
 **Un-defer trigger**: a second in-house app wastes a real run on `finish_reason="length"` truncation.
 
+## `SMOLLLM_BASE_URL` / `SMOLLLM_API_KEY` env defaults
+
+**Status**: deferred — bare model names resolve against the explicit `base_url`/`api_key` parameters only; no global env fallback exists.
+
+**Design**: read `SMOLLLM_BASE_URL` / `SMOLLLM_API_KEY` as defaults for a bare model when the explicit parameters are absent; explicit arguments always win. Never keyed per provider — bare mode has no provider name to build `{PROVIDER}_*` env names from.
+
+**Un-defer trigger**: a real in-house consumer that cannot pass explicit parameters (e.g. credentials reachable only through environment).
+
 ## Health-aware balancer
 
 **Status**: deferred — `/stats` failures data does not yet show a dead-key pattern.

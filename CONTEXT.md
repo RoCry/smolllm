@@ -9,7 +9,10 @@ A named OpenAI-compatible endpoint (e.g. `openai`, `groq`); credentials and base
 _Avoid_: vendor, backend.
 
 **Model spec**:
-The user-facing model string `provider/model[!effort]`; comma-separated specs form a fallback chain.
+The user-facing model string `provider/model[!effort]`, or a bare `model[!effort]` without `/`; comma-separated specs form a fallback chain and may mix both forms.
+
+**Bare model**:
+A model spec with no provider: base URL and API key must be passed explicitly (no env fallback); provider identity stays empty in responses, usage, and hook events.
 
 **Fallback chain**:
 Ordered or weighted candidate models; on failure the call advances to the next candidate.

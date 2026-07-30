@@ -8,14 +8,13 @@ from time import perf_counter
 import httpx
 
 from .balancer import balancer
-from .env import get_env_var
 from .http_stream import handle_http_error, iter_stream_lines, process_stream_response, usage_tokens_from_payload
 from .log import logger
 from .metrics import estimate_tokens, format_metrics
 from .model_selector import RandomSelector as RandomSelector
 from .model_selector import SequentialSelector as SequentialSelector
 from .model_selector import create_selector
-from .providers import Provider, parse_model_spec, parse_model_string
+from .providers import Provider, parse_model_spec, parse_model_string, resolve_credentials
 from .request import prepare_auth_headers, prepare_client_and_auth, prepare_request_data
 from .response import extract_text_from_response as _extract_text_from_response
 from .stream import decode_sse_chunk, extract_delta, extract_finish_reason, extract_model, update_usage
@@ -60,8 +59,7 @@ async def _prepare_llm_call(
         raise ValueError("Model string not found. Set SMOLLLM_MODEL environment variable or pass model parameter")
     provider, model_name = parse_model_string(model, base_url=base_url)
 
-    base_url = base_url or get_env_var(provider.name, "BASE_URL", provider.base_url)
-    api_key = api_key or get_env_var(provider.name, "API_KEY")
+    base_url, api_key = resolve_credentials(provider, model_name=model_name, base_url=base_url, api_key=api_key)
 
     api_key, base_url = balancer.choose_pair(api_key, base_url)
     image_list = list(image_paths) if image_paths else None
@@ -151,10 +149,11 @@ async def ask_llm(
 ) -> LLMResponse:
     """
     Args:
-        model: provider/model_name (e.g., "openai/gpt-4" or "gemini"), fallback to SMOLLLM_MODEL
+        model: provider/model_name (e.g., "openai/gpt-4"), or a bare model name
+              (e.g., "gpt-4") with explicit base_url + api_key; fallback to SMOLLLM_MODEL
               Can be: str, list[str] (fallback order), set[str] (random), dict[str, weight] (weighted random)
-        api_key: Optional API key, fallback to ${PROVIDER}_API_KEY
-        base_url: Custom base URL for API endpoint, fallback to ${PROVIDER}_BASE_URL
+        api_key: Optional API key, fallback to ${PROVIDER}_API_KEY (bare models: explicit only)
+        base_url: Custom base URL for API endpoint, fallback to ${PROVIDER}_BASE_URL (bare models: explicit only)
         handler: Optional callback for handling streaming responses
         remove_backticks: Whether to remove backticks from the response, e.g. ```markdown\nblabla\n``` -> blabla
         image_paths: Optional list of image paths to include with the prompt
@@ -334,10 +333,11 @@ async def stream_llm(
     """Similar to ask_llm but yields chunks of text as they arrive.
 
     Args:
-        model: provider/model_name (e.g., "openai/gpt-4" or "gemini"), fallback to SMOLLLM_MODEL
+        model: provider/model_name (e.g., "openai/gpt-4"), or a bare model name
+              (e.g., "gpt-4") with explicit base_url + api_key; fallback to SMOLLLM_MODEL
               Can be: str, list[str] (fallback order), set[str] (random), dict[str, weight] (weighted random)
-        api_key: Optional API key, fallback to ${PROVIDER}_API_KEY
-        base_url: Custom base URL for API endpoint, fallback to ${PROVIDER}_BASE_URL
+        api_key: Optional API key, fallback to ${PROVIDER}_API_KEY (bare models: explicit only)
+        base_url: Custom base URL for API endpoint, fallback to ${PROVIDER}_BASE_URL (bare models: explicit only)
         image_paths: Optional list of image paths to include with the prompt
         reasoning_effort: Optional reasoning effort passed through to the provider (e.g. "none", "medium", "xhigh")
         max_tokens: Optional maximum number of output tokens

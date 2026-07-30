@@ -5,12 +5,11 @@ from collections.abc import Sequence
 from time import perf_counter
 
 from .balancer import balancer
-from .env import get_env_var
 from .http_stream import handle_http_error
 from .log import logger
 from .metrics import estimate_tokens
 from .model_selector import create_selector
-from .providers import parse_model_spec, parse_model_string
+from .providers import parse_model_spec, parse_model_string, resolve_credentials
 from .request import prepare_client_and_auth, prepare_embedding_request_data
 from .types import EmbedResponse, Hook, ModelInput, RequestEvent, Usage
 from .utils import preview_api_key
@@ -69,8 +68,9 @@ async def embed_llm(
             provider, model_name = parse_model_string(model_spec, base_url=base_url)
             attempt_provider = provider.name
             attempt_model_name = model_name
-            resolved_base = base_url or get_env_var(provider.name, "BASE_URL", provider.base_url)
-            resolved_key = api_key or get_env_var(provider.name, "API_KEY")
+            resolved_base, resolved_key = resolve_credentials(
+                provider, model_name=model_name, base_url=base_url, api_key=api_key
+            )
             chosen_key, chosen_url = balancer.choose_pair(resolved_key, resolved_base)
             attempt_api_key = chosen_key
             url, data = prepare_embedding_request_data(

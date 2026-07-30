@@ -44,6 +44,17 @@ response = await ask_llm(
 
 Format: `provider/model_name` (e.g., `openai/gpt-4`, `gemini/gemini-2.0-flash`)
 
+A bare model name (no `/`) targets an endpoint directly — pass `base_url` and `api_key` explicitly (no env fallback):
+
+```python
+response = await ask_llm(
+    "hi",
+    model="gpt-4",
+    base_url="https://my-proxy.example/v1",
+    api_key="sk-xxx",
+)
+```
+
 ### API Keys
 
 The library looks for API keys in environment variables following the pattern: `{PROVIDER}_API_KEY`

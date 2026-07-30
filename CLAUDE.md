@@ -54,7 +54,7 @@ ruff format src/            # Format code
 - `src/smolllm/request.py` - HTTP request payload and endpoint construction
 
 ### Key Design Patterns
-1. **Provider Format**: All models use `provider/model_name` format (e.g., `openai/gpt-4`)
+1. **Provider Format**: Models use `provider/model_name` format (e.g., `openai/gpt-4`); a bare model name (no `/`) is allowed with explicit `base_url` + `api_key` parameters (no env fallback, empty provider identity)
 2. **Environment Variables**: API keys follow `{PROVIDER}_API_KEY` pattern, base URLs follow `{PROVIDER}_BASE_URL`
 3. **Load Balancing**: Supports multiple API keys per provider with comma separation
 4. **Configuration**: Provider configurations stored in `providers.json` with 41 providers

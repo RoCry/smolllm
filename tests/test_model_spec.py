@@ -21,9 +21,9 @@ def test_strips_whitespace():
     assert parse_model_spec("  groq/qwen/qwen3-32b  ! none ") == ("groq/qwen/qwen3-32b", "none")
 
 
-def test_only_provider():
+def test_bare_model():
     assert parse_model_spec("gemini") == ("gemini", None)
 
 
-def test_only_provider_with_effort():
-    assert parse_model_spec("gemini!low") == ("gemini", "low")
+def test_bare_model_with_effort():
+    assert parse_model_spec("gpt-4!low") == ("gpt-4", "low")
