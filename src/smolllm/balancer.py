@@ -8,7 +8,7 @@ class SimpleBalancer:
 
     def __init__(self) -> None:
         self.pair_usage: dict[tuple[str, str], int] = {}
-        self.disabled_keys: set[str] = set()
+        self.disabled_pairs: set[tuple[str, str]] = set()
 
     def _parse_items(self, items: str) -> list[str]:
         return [item.strip() for item in items.split(",")]
@@ -35,7 +35,7 @@ class SimpleBalancer:
                 raise ValueError("When using multiple keys and URLs, their counts must match")
             pairs = list(zip(key_list, url_list, strict=True))
 
-        pairs = [pair for pair in pairs if pair[0] not in self.disabled_keys]
+        pairs = [pair for pair in pairs if pair not in self.disabled_pairs]
         if not pairs:
             raise RuntimeError("No active API keys remain for configured pool")
 
@@ -52,10 +52,11 @@ class SimpleBalancer:
 
         return chosen_pair
 
-    def evict_key(self, key: str) -> bool:
-        if key in self.disabled_keys:
+    def evict_pair(self, key: str, url: str) -> bool:
+        pair = (key, url)
+        if pair in self.disabled_pairs:
             return False
-        self.disabled_keys.add(key)
+        self.disabled_pairs.add(pair)
         return True
 
 

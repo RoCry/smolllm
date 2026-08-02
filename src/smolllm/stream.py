@@ -4,7 +4,7 @@ import json
 from collections.abc import Mapping, MutableMapping
 from typing import cast
 
-from .errors import brief_error_detail
+from .errors import brief_error_detail, extract_error_reason_codes
 from .log import logger
 from .types import StreamChunk, StreamError
 
@@ -85,11 +85,12 @@ def decode_sse_chunk(line: str) -> dict[str, object] | None:
         chunk[key_obj] = value
     if "error" in chunk:
         error_obj = chunk.get("error")
+        reason_codes = extract_error_reason_codes(error_obj)
         if isinstance(error_obj, Mapping):
             message = error_obj.get("message")
             if isinstance(message, str) and message.strip():
-                raise StreamError(brief_error_detail(message))
-        raise StreamError("Stream error")
+                raise StreamError(brief_error_detail(message), reason_codes=reason_codes)
+        raise StreamError("Stream error", reason_codes=reason_codes)
     return chunk
 
 

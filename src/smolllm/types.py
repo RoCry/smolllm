@@ -23,8 +23,18 @@ ModelInput = str | Sequence[str] | set[str] | dict[str, float | int]
 class StreamError(RuntimeError):
     """Raised when a streaming response fails mid-flight."""
 
-    def __init__(self, message: str, *, partial: str | None = None) -> None:
+    partial: str | None
+    reason_codes: frozenset[str]
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        partial: str | None = None,
+        reason_codes: frozenset[str] | None = None,
+    ) -> None:
         self.partial = partial
+        self.reason_codes = reason_codes or frozenset()
         super().__init__(message)
 
 

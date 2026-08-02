@@ -8,7 +8,7 @@ from time import perf_counter
 import httpx
 
 from .balancer import balancer
-from .errors import evict_permanent_key, render_exception
+from .errors import evict_permanent_pair, render_exception
 from .http_stream import handle_http_error, iter_stream_lines, process_stream_response, usage_tokens_from_payload
 from .log import logger
 from .metrics import estimate_tokens, format_metrics
@@ -52,7 +52,7 @@ async def _prepare_llm_call(
     seed: int | None = None,
     include_stream_usage: bool = True,
     client: httpx.AsyncClient | None = None,
-) -> tuple[str, dict[str, object], httpx.AsyncClient, Provider, str, str]:
+) -> tuple[str, dict[str, object], httpx.AsyncClient, Provider, str, str, str]:
     """Common setup logic for LLM API calls."""
     if not model:
         model = os.getenv("SMOLLLM_MODEL")
@@ -87,7 +87,7 @@ async def _prepare_llm_call(
     )
 
     http_client = client if client is not None else prepare_client_and_auth(url, api_key)
-    return url, data, http_client, provider, model_name, api_key
+    return url, data, http_client, provider, model_name, api_key, base_url
 
 
 def _resolve_usage_tokens(
@@ -176,6 +176,7 @@ async def ask_llm(
         attempt_model_spec = m
         attempt_model_name = ""
         attempt_api_key = ""
+        attempt_base_url = ""
         input_tokens = 0
         start_time = perf_counter()
         ttft_ms: int | None = None
@@ -184,7 +185,7 @@ async def ask_llm(
             model_spec, effort_override = parse_model_spec(m)
             attempt_model_spec = model_spec
             effective_effort = effort_override if effort_override is not None else reasoning_effort
-            url, data, http_client, provider, model_name, used_api_key = await _prepare_llm_call(
+            url, data, http_client, provider, model_name, used_api_key, used_base_url = await _prepare_llm_call(
                 prompt,
                 system_prompt=system_prompt,
                 model=model_spec,
@@ -205,6 +206,7 @@ async def ask_llm(
             attempt_provider = provider.name
             attempt_model_name = model_name
             attempt_api_key = used_api_key
+            attempt_base_url = used_base_url
 
             input_tokens = estimate_tokens(str(data))
             start_time = perf_counter()
@@ -291,7 +293,7 @@ async def ask_llm(
             )
         except Exception as e:
             last_error = e
-            _ = evict_permanent_key(balancer, attempt_api_key, e)
+            _ = evict_permanent_pair(balancer, attempt_api_key, attempt_base_url, e)
             logger.warning(f"Failed to get response from model {m}: {render_exception(e)}")
             if hook is not None:
                 duration_ms = int((perf_counter() - start_time) * 1000)
@@ -372,13 +374,14 @@ async def stream_llm(
             attempt_model_spec = m
             attempt_model_name = ""
             attempt_api_key = ""
+            attempt_base_url = ""
             input_tokens = 0
             start_time = perf_counter()
             try:
                 model_spec, effort_override = parse_model_spec(m)
                 attempt_model_spec = model_spec
                 effective_effort = effort_override if effort_override is not None else reasoning_effort
-                url, data, http_client, provider, model_name, used_api_key = await _prepare_llm_call(
+                url, data, http_client, provider, model_name, used_api_key, used_base_url = await _prepare_llm_call(
                     prompt,
                     system_prompt=system_prompt,
                     model=model_spec,
@@ -395,6 +398,7 @@ async def stream_llm(
                 attempt_provider = provider.name
                 attempt_model_name = model_name
                 attempt_api_key = used_api_key
+                attempt_base_url = used_base_url
 
                 input_tokens = estimate_tokens(str(data))
                 start_time = perf_counter()
@@ -486,7 +490,7 @@ async def stream_llm(
                 return  # Stream completed successfully
 
             except Exception as e:
-                _ = evict_permanent_key(balancer, attempt_api_key, e)
+                _ = evict_permanent_pair(balancer, attempt_api_key, attempt_base_url, e)
                 if hook is not None:
                     duration_ms = int((perf_counter() - start_time) * 1000)
                     fail_usage = Usage(

@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from time import perf_counter
+from typing import cast
 
 import httpx
 
-from .errors import brief_error_detail
+from .errors import brief_error_detail, extract_error_reason_codes, provider_http_status_error
 from .log import logger
 from .stream import decode_sse_chunk, extract_delta, extract_finish_reason, extract_model, update_usage
 from .types import StreamHandler
@@ -15,11 +16,17 @@ from .utils import ThinkTagFilter
 async def handle_http_error(response: httpx.Response) -> None:
     if response.status_code >= 400:
         error_text = await response.aread()
-        detail = brief_error_detail(error_text.decode(errors="replace"))
-        raise httpx.HTTPStatusError(
+        decoded = error_text.decode(errors="replace")
+        detail = brief_error_detail(decoded)
+        try:
+            payload = cast(object, response.json())
+        except ValueError:
+            payload = decoded
+        raise provider_http_status_error(
             f"HTTP Error {response.status_code}: {detail}",
             request=response.request,
             response=response,
+            reason_codes=extract_error_reason_codes(payload),
         )
 
 
