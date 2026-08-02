@@ -5,6 +5,7 @@ from time import perf_counter
 
 import httpx
 
+from .errors import brief_error_detail
 from .log import logger
 from .stream import decode_sse_chunk, extract_delta, extract_finish_reason, extract_model, update_usage
 from .types import StreamHandler
@@ -14,8 +15,9 @@ from .utils import ThinkTagFilter
 async def handle_http_error(response: httpx.Response) -> None:
     if response.status_code >= 400:
         error_text = await response.aread()
+        detail = brief_error_detail(error_text.decode(errors="replace"))
         raise httpx.HTTPStatusError(
-            f"HTTP Error {response.status_code}: {error_text.decode()}",
+            f"HTTP Error {response.status_code}: {detail}",
             request=response.request,
             response=response,
         )

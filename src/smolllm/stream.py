@@ -4,6 +4,7 @@ import json
 from collections.abc import Mapping, MutableMapping
 from typing import cast
 
+from .errors import brief_error_detail
 from .log import logger
 from .types import StreamChunk, StreamError
 
@@ -71,7 +72,7 @@ def decode_sse_chunk(line: str) -> dict[str, object] | None:
     try:
         chunk_raw_obj = cast(object, json.loads(payload))
     except json.JSONDecodeError as exc:
-        message = f"Malformed streaming chunk: {payload}"
+        message = brief_error_detail(f"Malformed streaming chunk: {payload}")
         logger.error(message)
         raise ValueError(message) from exc
     if not isinstance(chunk_raw_obj, dict):
@@ -87,7 +88,7 @@ def decode_sse_chunk(line: str) -> dict[str, object] | None:
         if isinstance(error_obj, Mapping):
             message = error_obj.get("message")
             if isinstance(message, str) and message.strip():
-                raise StreamError(message.strip())
+                raise StreamError(brief_error_detail(message))
         raise StreamError("Stream error")
     return chunk
 

@@ -66,6 +66,11 @@ OPENAI_API_KEY=sk-xxx
 GEMINI_API_KEY=key1,key2  # Multiple keys supported
 ```
 
+Keys rejected with a permanent credential status (for example
+`CONSUMER_SUSPENDED` or `API_KEY_INVALID`) are removed from the active pool for
+the rest of the process lifetime. Error logs redact credential-shaped content;
+key eviction is identified only by a one-way fingerprint.
+
 ### Custom Base URLs
 
 Override default API endpoints using: `{PROVIDER}_BASE_URL`

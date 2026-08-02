@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from time import perf_counter
 
 from .balancer import balancer
+from .errors import evict_permanent_key, render_exception
 from .http_stream import handle_http_error
 from .log import logger
 from .metrics import estimate_tokens
@@ -127,7 +128,8 @@ async def embed_llm(
             )
         except Exception as e:
             last_error = e
-            logger.warning(f"Failed to embed with model {m}: {e}")
+            _ = evict_permanent_key(balancer, attempt_api_key, e)
+            logger.warning(f"Failed to embed with model {m}: {render_exception(e)}")
             if hook is not None:
                 duration_ms = int((perf_counter() - start_time) * 1000)
                 fail_usage = Usage(

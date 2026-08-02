@@ -8,6 +8,7 @@ from time import perf_counter
 import httpx
 
 from .balancer import balancer
+from .errors import evict_permanent_key, render_exception
 from .http_stream import handle_http_error, iter_stream_lines, process_stream_response, usage_tokens_from_payload
 from .log import logger
 from .metrics import estimate_tokens, format_metrics
@@ -290,7 +291,8 @@ async def ask_llm(
             )
         except Exception as e:
             last_error = e
-            logger.warning(f"Failed to get response from model {m}: {e}")
+            _ = evict_permanent_key(balancer, attempt_api_key, e)
+            logger.warning(f"Failed to get response from model {m}: {render_exception(e)}")
             if hook is not None:
                 duration_ms = int((perf_counter() - start_time) * 1000)
                 fail_usage = Usage(
@@ -484,6 +486,7 @@ async def stream_llm(
                 return  # Stream completed successfully
 
             except Exception as e:
+                _ = evict_permanent_key(balancer, attempt_api_key, e)
                 if hook is not None:
                     duration_ms = int((perf_counter() - start_time) * 1000)
                     fail_usage = Usage(
@@ -499,10 +502,10 @@ async def stream_llm(
                     hook(RequestEvent(usage=fail_usage, error=e, timestamp=time.time()))
                 if isinstance(e, StreamError) and e.partial:
                     last_error = e
-                    logger.warning(f"Stream failed for model {m}, not retrying (partial output): {e}")
+                    logger.warning(f"Stream failed for model {m}, not retrying (partial output): {render_exception(e)}")
                     raise
                 last_error = e
-                logger.warning(f"Stream failed for model {m}, trying fallback: {e}")
+                logger.warning(f"Stream failed for model {m}, trying fallback: {render_exception(e)}")
                 continue
         if last_error:
             raise last_error

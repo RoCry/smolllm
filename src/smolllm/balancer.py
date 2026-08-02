@@ -6,8 +6,9 @@ import random
 class SimpleBalancer:
     """Balances API key and URL pairs usage."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.pair_usage: dict[tuple[str, str], int] = {}
+        self.disabled_keys: set[str] = set()
 
     def _parse_items(self, items: str) -> list[str]:
         return [item.strip() for item in items.split(",")]
@@ -34,6 +35,10 @@ class SimpleBalancer:
                 raise ValueError("When using multiple keys and URLs, their counts must match")
             pairs = list(zip(key_list, url_list, strict=True))
 
+        pairs = [pair for pair in pairs if pair[0] not in self.disabled_keys]
+        if not pairs:
+            raise RuntimeError("No active API keys remain for configured pool")
+
         # Initialize usage count for new pairs
         for pair in pairs:
             if pair not in self.pair_usage:
@@ -46,6 +51,12 @@ class SimpleBalancer:
         self.pair_usage[chosen_pair] += 1
 
         return chosen_pair
+
+    def evict_key(self, key: str) -> bool:
+        if key in self.disabled_keys:
+            return False
+        self.disabled_keys.add(key)
+        return True
 
 
 # Create a global instance
