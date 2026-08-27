@@ -4,8 +4,10 @@ Conclusions from a 2026-07-11 design review. Each feature passed review but has 
 
 ## `extra_body` escape hatch
 
-**Status**: IMPLEMENTED in Python 0.11.0 (2026-08-27) — consumer: rclv (RoCry/rclv), whose
-agent loop issues tool calls. Go/Rust/Swift stay deferred until a consumer there needs it.
+**Status**: IMPLEMENTED in Python 0.11.0, Go 0.2.0 and Rust 0.5.0 (all 2026-08-27). Rust spells it
+as a builder setter `extra_body(serde_json::Value) -> Result<Self, Error>` whose reserved-key check
+runs in the setter, not at send time — the Rust fallback loop retries every error on each leg and
+would report only the last one. Swift stays deferred.
 
 **Design** (as shipped):
 - Python: `extra_body: dict[str, Any] | None = None` on `ask_llm`/`stream_llm`; Go: `WithExtraBody(map[string]any)`.
@@ -18,9 +20,26 @@ agent loop issues tool calls. Go/Rust/Swift stay deferred until a consumer there
 
 ## Tool calling
 
-**Status**: IMPLEMENTED in Python 0.11.0 (2026-08-27) — consumer: rclv (RoCry/rclv), a personal
-agent whose Direct Runtime runs its own tool loop. Go/Rust/Swift and smolllm-server unchanged;
-the server still rejects `tools` until the Go port follows.
+**Status**: SHIPPED everywhere except Swift (2026-08-27) — Python 0.11.0 (consumer: rclv, whose
+Direct Runtime runs its own tool loop), Go 0.2.0, Rust 0.5.0, and smolllm-server, which now forwards
+tools instead of rejecting them. Swift stays frozen.
+**ADR-0001 waiver**: the ports had no in-house consumer — they ship for external users of
+smolllm-server (OpenAI-compatible clients) on family-parity grounds; the design is unchanged.
+Port-specific decisions: typed `ToolCall` (Go/Rust have no "raw dict" idiom) carrying the wire
+fields plus unknown provider keys verbatim (Gemini 3 `extra_content.google.thought_signature`
+must survive replay — see smolllm#8 for the Python stream-mode gap); FinishReason stays verbatim
+even though Gemini streams `stop` alongside tool calls; Go fails a leg on tool calls +
+`finish_reason=length` (mirrors Python), Rust adds no truncation policy; the server forwards an
+allowlist of Pass-through fields (`tools`, `tool_choice`, `parallel_tool_calls`, `response_format`)
+and emits assembled `tool_calls` in one delta at stream end.
+
+**Verified live** (2026-08-27, both modes, tool call → replay → final answer): Go against omlx,
+deepseek, groq and gemini; Rust against omlx, deepseek and gemini; the server through the `agent`
+and `balance` aliases with the official `openai` Python SDK, whose own stream accumulator
+reassembles the single tool-call delta correctly. Two provider facts worth keeping: Gemini reports
+`finish_reason: "stop"` while returning tool calls (key on the calls, not the reason), and every
+`codeagentlayer/antigravity` leg silently drops `tools` and answers in prose — hence the
+tool-capable-only `agent` alias.
 
 **Design** (as shipped — response-side only; request side rides `extra_body={"tools": [...]}` — signatures stay untouched):
 - Accept `tool`-role messages and assistant messages carrying `tool_calls` (Go `Prompt.Validate()` currently rejects them; must be relaxed).
