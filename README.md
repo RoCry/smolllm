@@ -40,6 +40,24 @@ response = await ask_llm(
 )
 ```
 
+## Tool Calling
+
+Pass tools through the `extra_body` escape hatch; assembled tool calls come back on
+the response. smolllm never executes a tool — you run the loop and replay the results
+as `assistant` + `tool` messages. See [examples/tool_calling.py](examples/tool_calling.py).
+
+```python
+response = await ask_llm(messages, extra_body={"tools": TOOLS})
+for call in response.tool_calls:
+    name = call["function"]["name"]
+    args = json.loads(call["function"]["arguments"])
+```
+
+`extra_body` also carries any other raw request field the library does not model
+(`response_format`, `service_tier`, provider-private params); it is merged last, so
+you win over library defaults. Fields the library reads back — `stream`,
+`stream_options`, `messages`, `model` — are rejected.
+
 ## Provider Configuration
 
 Format: `provider/model_name` (e.g., `openai/gpt-4`, `gemini/gemini-2.0-flash`)

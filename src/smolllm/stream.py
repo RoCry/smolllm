@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, MutableMapping
+from dataclasses import dataclass, field
 from typing import cast
 
 from .errors import brief_error_detail, extract_error_reason_codes
@@ -40,6 +41,86 @@ def extract_delta(chunk: Mapping[str, object]) -> StreamChunk | None:
     if not content and not reasoning:
         return None
     return StreamChunk(content=content, reasoning=reasoning)
+
+
+def extract_tool_call_deltas(chunk: Mapping[str, object]) -> list[Mapping[str, object]]:
+    """Pull the raw ``delta.tool_calls`` fragments out of a decoded chunk."""
+    choices = chunk.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return []
+    choice = choices[0]
+    if not isinstance(choice, Mapping):
+        return []
+    delta = cast(Mapping[str, object], choice).get("delta")
+    if not isinstance(delta, Mapping):
+        return []
+    calls = cast(Mapping[str, object], delta).get("tool_calls")
+    if not isinstance(calls, list):
+        return []
+    return [cast(Mapping[str, object], call) for call in calls if isinstance(call, Mapping)]
+
+
+@dataclass(slots=True)
+class ToolCallAccumulator:
+    """Reassembles streamed tool-call deltas into whole calls.
+
+    Providers stream a tool call across many frames: the first carries ``id`` and
+    the function name, later ones append fragments of the argument JSON. Fragments
+    are never pushed to stream handlers — a caller can only act on a complete call,
+    so the assembled list is exposed once the stream ends.
+    """
+
+    _slots: dict[int, dict[str, object]] = field(default_factory=dict)
+    _last_slot: int | None = None
+
+    def feed(self, chunk: Mapping[str, object]) -> None:
+        for delta in extract_tool_call_deltas(chunk):
+            self._merge(delta)
+
+    def _slot_for(self, delta: Mapping[str, object]) -> int:
+        index = delta.get("index")
+        if isinstance(index, int):
+            return index
+        # Providers that omit `index` start a new call whenever they send a fresh
+        # `id`; everything else continues the call already in progress.
+        if delta.get("id") or self._last_slot is None:
+            return max(self._slots, default=-1) + 1
+        return self._last_slot
+
+    def _merge(self, delta: Mapping[str, object]) -> None:
+        slot = self._slot_for(delta)
+        self._last_slot = slot
+        call = self._slots.setdefault(slot, {})
+
+        for key in ("id", "type"):
+            value = delta.get(key)
+            if isinstance(value, str) and value:
+                call[key] = value
+
+        function = delta.get("function")
+        if not isinstance(function, Mapping):
+            return
+        merged = cast(dict[str, object], call.setdefault("function", {}))
+        name = cast(Mapping[str, object], function).get("name")
+        if isinstance(name, str) and name:
+            merged["name"] = name
+        arguments = cast(Mapping[str, object], function).get("arguments")
+        if isinstance(arguments, str):
+            previous = merged.get("arguments")
+            merged["arguments"] = (previous if isinstance(previous, str) else "") + arguments
+
+    def result(self) -> list[dict[str, object]]:
+        """The assembled calls, ordered by their provider-assigned index."""
+        calls: list[dict[str, object]] = []
+        for _, call in sorted(self._slots.items()):
+            assembled = dict(call)
+            function = assembled.get("function")
+            if isinstance(function, dict):
+                merged = cast(dict[str, object], dict(function))
+                merged.setdefault("arguments", "")
+                assembled["function"] = merged
+            calls.append(assembled)
+        return calls
 
 
 def update_usage(chunk: Mapping[str, object], usage: MutableMapping[str, int]) -> None:

@@ -18,7 +18,15 @@ from .model_selector import create_selector
 from .providers import Provider, parse_model_spec, parse_model_string, resolve_credentials
 from .request import prepare_auth_headers, prepare_client_and_auth, prepare_request_data
 from .response import extract_text_from_response as _extract_text_from_response
-from .stream import decode_sse_chunk, extract_delta, extract_finish_reason, extract_model, update_usage
+from .response import extract_tool_calls
+from .stream import (
+    ToolCallAccumulator,
+    decode_sse_chunk,
+    extract_delta,
+    extract_finish_reason,
+    extract_model,
+    update_usage,
+)
 from .types import (
     Hook,
     LLMResponse,
@@ -51,6 +59,7 @@ async def _prepare_llm_call(
     stop: str | Sequence[str] | None = None,
     seed: int | None = None,
     include_stream_usage: bool = True,
+    extra_body: dict[str, object] | None = None,
     client: httpx.AsyncClient | None = None,
 ) -> tuple[str, dict[str, object], httpx.AsyncClient, Provider, str, str, str]:
     """Common setup logic for LLM API calls."""
@@ -79,6 +88,7 @@ async def _prepare_llm_call(
         stop=stop,
         seed=seed,
         include_stream_usage=include_stream_usage,
+        extra_body=extra_body,
     )
     effort_log = f" reasoning_effort={reasoning_effort}" if reasoning_effort is not None else ""
     logger.info(
@@ -146,6 +156,7 @@ async def ask_llm(
     stop: str | Sequence[str] | None = None,
     seed: int | None = None,
     hook: Hook | None = None,
+    extra_body: dict[str, object] | None = None,
     client: httpx.AsyncClient | None = None,
 ) -> LLMResponse:
     """
@@ -163,10 +174,13 @@ async def ask_llm(
         max_tokens: Optional maximum number of output tokens
         stop: Optional stop sequence or stop sequence list
         seed: Optional deterministic sampling seed for providers that support it
+        extra_body: Optional raw request fields merged into the payload last, e.g.
+              {"tools": [...]} or {"response_format": {...}}. Cannot set the fields the
+              library machinery owns (stream, stream_options, messages, model).
         client: Optional caller-owned reusable HTTP client. Injected clients remain open after the call.
 
     Returns:
-        LLMResponse object containing the text response, model used, and provider
+        LLMResponse with the text, any tool calls the model requested, model used, and provider
     """
     selector = _create_selector(model)
     last_error: Exception | None = None
@@ -199,6 +213,7 @@ async def ask_llm(
                 max_tokens=max_tokens,
                 stop=stop,
                 seed=seed,
+                extra_body=extra_body,
                 client=client,
             )
             if client is None:
@@ -215,16 +230,23 @@ async def ask_llm(
             reasoning = ""
             resolved_model: str | None = None
             finish_reason: str | None = None
+            tool_calls: list[dict[str, object]] = []
             provider_usage: tuple[int | None, int | None] | None = None
             request_headers = prepare_auth_headers(used_api_key) if client is not None else None
             if stream:
                 stream_usage: dict[str, int] = {}
-                resp, reasoning, ttft_ms, resolved_model, finish_reason = await process_stream_response(
+                outcome = await process_stream_response(
                     iter_stream_lines(http_client, url, data, timeout, headers=request_headers),
                     handler,
                     start_time,
                     usage=stream_usage,
                 )
+                resp = outcome.text
+                reasoning = outcome.reasoning
+                ttft_ms = outcome.ttft_ms
+                resolved_model = outcome.resolved_model
+                finish_reason = outcome.finish_reason
+                tool_calls = outcome.tool_calls
                 prompt_tokens = stream_usage.get("prompt_tokens")
                 completion_tokens = stream_usage.get("completion_tokens")
                 if prompt_tokens is not None or completion_tokens is not None:
@@ -241,6 +263,7 @@ async def ask_llm(
                 await response.aread()
                 payload = response.json()
                 resp, reasoning = _extract_text_from_response(payload)
+                tool_calls = extract_tool_calls(payload)
                 resolved_model = extract_model(payload)
                 finish_reason = extract_finish_reason(payload) if isinstance(payload, dict) else None
                 provider_usage = usage_tokens_from_payload(payload)
@@ -249,9 +272,9 @@ async def ask_llm(
 
                     await handler(StreamChunk(content=resp, reasoning=reasoning))
 
-            if not resp and not reasoning:
+            if not resp and not reasoning and not tool_calls:
                 raise ValueError(f"Received empty response from model {m}")
-            if _is_truncated(finish_reason, has_content=bool(resp or reasoning), stream=stream):
+            if _is_truncated(finish_reason, has_content=bool(resp or reasoning or tool_calls), stream=stream):
                 raise StreamError(f"Truncated response from model {m} (finish_reason={finish_reason})")
             if remove_backticks:
                 resp = strip_backticks(resp)
@@ -290,6 +313,7 @@ async def ask_llm(
                 reasoning=reasoning,
                 usage=usage,
                 finish_reason=finish_reason,
+                tool_calls=tool_calls,
             )
         except Exception as e:
             last_error = e
@@ -333,6 +357,7 @@ async def stream_llm(
     stop: str | Sequence[str] | None = None,
     seed: int | None = None,
     hook: Hook | None = None,
+    extra_body: dict[str, object] | None = None,
 ) -> StreamResponse:
     """Similar to ask_llm but yields chunks of text as they arrive.
 
@@ -347,9 +372,11 @@ async def stream_llm(
         max_tokens: Optional maximum number of output tokens
         stop: Optional stop sequence or stop sequence list
         seed: Optional deterministic sampling seed for providers that support it
+        extra_body: Optional raw request fields merged into the payload last (see ask_llm)
 
     Returns:
-        StreamResponse object with stream iterator and model information
+        StreamResponse object with stream iterator and model information; any tool
+        calls the model requested are on ``.tool_calls`` once the stream is exhausted
 
     Note:
         If streaming fails mid-way, retries with fallback models. Already-yielded
@@ -394,6 +421,7 @@ async def stream_llm(
                     max_tokens=max_tokens,
                     stop=stop,
                     seed=seed,
+                    extra_body=extra_body,
                 )
                 attempt_provider = provider.name
                 attempt_model_name = model_name
@@ -405,6 +433,7 @@ async def stream_llm(
                 first_token_time: float | None = None
                 think_filter = ThinkTagFilter()
                 stream_usage: dict[str, int] = {}
+                tool_call_acc = ToolCallAccumulator()
 
                 try:
                     async with http_client:
@@ -417,6 +446,7 @@ async def stream_llm(
                                 resolved_model = extract_model(raw)
                             if (reason := extract_finish_reason(raw)) is not None:
                                 finish_reason = reason
+                            tool_call_acc.feed(raw)
                             if chunk := extract_delta(raw):
                                 chunk = think_filter.feed(chunk)
                                 if chunk:
@@ -443,7 +473,8 @@ async def stream_llm(
                     raise
 
                 # Success - log metrics and record model info
-                if accumulated_content or accumulated_reasoning:
+                tool_calls = tool_call_acc.result()
+                if accumulated_content or accumulated_reasoning or tool_calls:
                     full_response = "".join(accumulated_content) + "".join(accumulated_reasoning)
                     prompt_tokens = stream_usage.get("prompt_tokens")
                     completion_tokens = stream_usage.get("completion_tokens")
@@ -485,6 +516,7 @@ async def stream_llm(
                     sr.resolved_model = resolved_model
                     sr.usage = usage
                     sr.finish_reason = finish_reason
+                    sr.tool_calls = tool_calls
                 if hook is not None:
                     hook(RequestEvent(usage=usage, error=None, timestamp=time.time()))
                 return  # Stream completed successfully

@@ -4,9 +4,10 @@ Conclusions from a 2026-07-11 design review. Each feature passed review but has 
 
 ## `extra_body` escape hatch
 
-**Status**: deferred — no current caller needs unmodeled request fields.
+**Status**: IMPLEMENTED in Python 0.11.0 (2026-08-27) — consumer: rclv (RoCry/rclv), whose
+agent loop issues tool calls. Go/Rust/Swift stay deferred until a consumer there needs it.
 
-**Design**:
+**Design** (as shipped):
 - Python: `extra_body: dict[str, Any] | None = None` on `ask_llm`/`stream_llm`; Go: `WithExtraBody(map[string]any)`.
 - Shallow-merged into the payload **last** — caller wins over library defaults.
 - Reserved keys fail fast (`ValueError`/panic): `stream`, `stream_options`, `messages`, `model` — library machinery (stream parser, usage collection, routing) depends on them.
@@ -17,9 +18,11 @@ Conclusions from a 2026-07-11 design review. Each feature passed review but has 
 
 ## Tool calling
 
-**Status**: deferred — nothing in-house issues tool calls through smolllm, so it cannot be tested or experienced for real.
+**Status**: IMPLEMENTED in Python 0.11.0 (2026-08-27) — consumer: rclv (RoCry/rclv), a personal
+agent whose Direct Runtime runs its own tool loop. Go/Rust/Swift and smolllm-server unchanged;
+the server still rejects `tools` until the Go port follows.
 
-**Design** (response-side only; request side rides `extra_body={"tools": [...]}` — signatures stay untouched):
+**Design** (as shipped — response-side only; request side rides `extra_body={"tools": [...]}` — signatures stay untouched):
 - Accept `tool`-role messages and assistant messages carrying `tool_calls` (Go `Prompt.Validate()` currently rejects them; must be relaxed).
 - Surface raw `tool_calls` (list of dicts — no typed ToolCall class) plus `finish_reason` on responses.
 - Streaming: accumulate tool-call deltas internally, expose after stream end; no partial-JSON pushes to handlers.
@@ -31,7 +34,7 @@ Conclusions from a 2026-07-11 design review. Each feature passed review but has 
 
 ## JSON mode / `response_format`
 
-**Status**: absorbed — no implementation ever needed; former roadmap item deleted.
+**Status**: absorbed — no implementation ever needed; complete since 0.11.0 shipped the escape hatch.
 
 `extra_body={"response_format": {...}}` is complete support once the escape hatch exists; the response side is unchanged (content is still text). Ship a docs example only. **Never auto-repair model JSON** — repair heuristics (balancing brace counts on truncated output) fabricate valid-but-wrong data; fence-stripping (`remove_backticks`) is the maximum.
 

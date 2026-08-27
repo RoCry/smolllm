@@ -49,13 +49,17 @@ class ResponseDisplay:
         if self.is_interactive:
             self._update_display(with_cursor=True)
 
-    def finalize(self) -> tuple[str, str]:
-        """Show final response without cursor. Returns (text, reasoning)."""
+    def finalize(self, *, allow_empty: bool = False) -> tuple[str, str]:
+        """Show final response without cursor. Returns (text, reasoning).
+
+        ``allow_empty`` is set by callers that hold the rest of the turn — an
+        assistant turn made only of tool calls displays nothing yet is complete.
+        """
         if self.is_interactive:
             self._update_display(with_cursor=False)
         text = self.final_response.strip()
         reasoning = self.reasoning_response.strip()
-        if not text and not reasoning:
+        if not text and not reasoning and not allow_empty:
             raise ValueError("LLM returned an empty response")
         return text, reasoning
 

@@ -50,6 +50,23 @@ def _normalize_reasoning_effort(reasoning_effort: str | None, *, provider_name: 
     return normalized
 
 
+# Library machinery depends on these: the stream parser, usage collection and
+# routing all read them back, so a caller override would silently break them.
+_RESERVED_EXTRA_BODY_KEYS = ("stream", "stream_options", "messages", "model")
+
+
+def _merge_extra_body(payload: dict[str, object], extra_body: dict[str, object] | None) -> dict[str, object]:
+    """Shallow-merge caller fields last so they win over library defaults."""
+    if not extra_body:
+        return payload
+    reserved = [key for key in _RESERVED_EXTRA_BODY_KEYS if key in extra_body]
+    if reserved:
+        names = ", ".join(repr(key) for key in reserved)
+        raise ValueError(f"extra_body may not set {names}")
+    payload.update(extra_body)
+    return payload
+
+
 def _prepare_openai_request(
     prompt: PromptType,
     system_prompt: str | None,
@@ -63,6 +80,7 @@ def _prepare_openai_request(
     stop: str | Sequence[str] | None,
     seed: int | None,
     include_stream_usage: bool,
+    extra_body: dict[str, object] | None,
 ) -> dict[str, object]:
     messages: list[Message] = []
     if system_prompt:
@@ -107,7 +125,7 @@ def _prepare_openai_request(
         payload["seed"] = seed
     if stream and include_stream_usage:
         payload["stream_options"] = {"include_usage": True}
-    return payload
+    return _merge_extra_body(payload, extra_body)
 
 
 def _build_endpoint_url(base_url: str, provider_name: str, suffix: str) -> str:
@@ -149,6 +167,7 @@ def prepare_request_data(
     stop: str | Sequence[str] | None = None,
     seed: int | None = None,
     include_stream_usage: bool = True,
+    extra_body: dict[str, object] | None = None,
 ) -> tuple[str, dict[str, object]]:
     """Prepare request URL, data and headers for the API call"""
     if temperature is not None and not 0.0 <= temperature <= 2.0:
@@ -183,6 +202,7 @@ def prepare_request_data(
         stop,
         seed,
         include_stream_usage,
+        extra_body,
     )
     return url, data
 

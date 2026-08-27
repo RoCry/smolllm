@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib import import_module
-from typing import TYPE_CHECKING, Literal, Protocol, TypedDict, override
+from typing import TYPE_CHECKING, Literal, NotRequired, Protocol, TypedDict, override
 
 if TYPE_CHECKING:
     import httpx
@@ -102,13 +102,19 @@ class LLMResponse:
     # OpenAI-style stop reason: "stop" (natural), "length" (hit cap), etc.
     # None when the upstream omitted it.
     finish_reason: str | None = None
+    # Raw provider tool calls, verbatim dicts (see the Tool call term in CONTEXT.md).
+    # Empty unless the model answered with tool calls; executing them and replaying
+    # the result is the caller's job — smolllm runs no agentic loop.
+    tool_calls: list[dict[str, object]] = field(default_factory=list)
 
     @override
     def __str__(self) -> str:
         return self.text
 
     def __bool__(self) -> bool:
-        return bool(self.text and self.text.strip())
+        # Tool calls count: an assistant turn that only requests tools carries no
+        # text but is a complete, useful response.
+        return bool((self.text and self.text.strip()) or self.tool_calls)
 
 
 @dataclass(slots=True)
@@ -153,6 +159,9 @@ class StreamResponse:
     usage: Usage | None = None
     # OpenAI-style stop reason of the underlying stream (see LLMResponse.finish_reason).
     finish_reason: str | None = None
+    # Raw provider tool calls, assembled from streamed deltas and populated once the
+    # stream is exhausted (partial argument JSON is never pushed to handlers).
+    tool_calls: list[dict[str, object]] = field(default_factory=list)
 
     def __aiter__(self) -> AsyncIterator[StreamChunk]:
         return self
@@ -174,7 +183,9 @@ class StreamResponse:
         with ResponseDisplay(handler) as disp:
             async for chunk in self:
                 await disp.update(chunk)
-            text, _ = disp.finalize()
+            # tool_calls is back-patched when the stream generator returns, so by
+            # now it tells us whether an empty display is legitimate.
+            text, _ = disp.finalize(allow_empty=bool(self.tool_calls))
         return text
 
 
@@ -202,18 +213,29 @@ class LLMFunction(Protocol):
         stop: str | Sequence[str] | None = ...,
         seed: int | None = ...,
         hook: Hook | None = ...,
+        extra_body: dict[str, object] | None = ...,
         client: httpx.AsyncClient | None = ...,
     ) -> LLMResponse:
         """Protocol describing the callable shape expected for LLM functions."""
         ...
 
 
-MessageRole = Literal["user", "assistant", "system"]
+MessageRole = Literal["user", "assistant", "system", "tool"]
 
 
 class Message(TypedDict):
+    """One OpenAI-shaped conversation message.
+
+    ``content`` is None on an assistant turn that only requests tool calls.
+    ``tool_calls`` (assistant) and ``tool_call_id`` (tool result) are present
+    only on those turns, so a caller-run tool loop replays losslessly.
+    """
+
     role: MessageRole
-    content: str | Sequence[dict[str, object]]
+    content: str | Sequence[dict[str, object]] | None
+    tool_calls: NotRequired[Sequence[dict[str, object]]]
+    tool_call_id: NotRequired[str]
+    name: NotRequired[str]
 
 
 PromptType = str | Sequence[Message]
