@@ -92,9 +92,17 @@ class ToolCallAccumulator:
         self._last_slot = slot
         call = self._slots.setdefault(slot, {})
 
-        for key in ("id", "type"):
-            value = delta.get(key)
-            if isinstance(value, str) and value:
+        for key, value in delta.items():
+            if key == "function":
+                continue
+            if key in ("id", "type"):
+                # Later frames repeat these as empty strings; keep the first real one.
+                if isinstance(value, str) and value:
+                    call[key] = value
+            elif value is not None:
+                # Everything else rides along verbatim — `index`, and provider extras
+                # such as Gemini's thought signature, which the provider expects back
+                # on replay. A streamed call must assemble like a non-streamed one.
                 call[key] = value
 
         function = delta.get("function")

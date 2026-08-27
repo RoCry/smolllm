@@ -83,6 +83,7 @@ def test_accumulator_merges_argument_fragments() -> None:
     calls = acc.result()
     assert len(calls) == 1
     assert calls[0] == {
+        "index": 0,
         "id": "call_1",
         "type": "function",
         "function": {"name": "get_weather", "arguments": '{"city":"SF"}'},
@@ -122,6 +123,60 @@ def test_accumulator_without_index_starts_new_call_on_id() -> None:
     calls = acc.result()
     assert [c["id"] for c in calls] == ["a", "b"]
     assert calls[0]["function"]["arguments"] == '{"x":1}'
+
+
+def test_accumulator_keeps_unknown_provider_keys() -> None:
+    """Gemini 3 returns a thought signature per call and expects it replayed."""
+    signature = "Cs0BAdHtim8abc"
+    acc = ToolCallAccumulator()
+    acc.feed(
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "id": "call_1",
+                                "type": "function",
+                                "function": {"name": "get_weather", "arguments": ""},
+                                "extra_content": {"google": {"thought_signature": signature}},
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    )
+    acc.feed({"choices": [{"delta": {"tool_calls": [{"index": 0, "function": {"arguments": "{}"}}]}}]})
+
+    calls = acc.result()
+    assert calls == [
+        {
+            "index": 0,
+            "id": "call_1",
+            "type": "function",
+            "function": {"name": "get_weather", "arguments": "{}"},
+            "extra_content": {"google": {"thought_signature": signature}},
+        }
+    ]
+
+
+def test_streamed_and_non_streamed_tool_calls_agree() -> None:
+    """The same provider reply must assemble identically in both modes."""
+    call = {
+        "index": 0,
+        "id": "call_1",
+        "type": "function",
+        "function": {"name": "get_weather", "arguments": '{"city":"Paris"}'},
+        "extra_content": {"google": {"thought_signature": "sig"}},
+    }
+    non_streamed = extract_tool_calls({"choices": [{"message": {"content": None, "tool_calls": [call]}}]})
+
+    acc = ToolCallAccumulator()
+    acc.feed({"choices": [{"delta": {"tool_calls": [call]}}]})
+
+    assert acc.result() == non_streamed
 
 
 def test_accumulator_is_empty_for_plain_text_stream() -> None:
