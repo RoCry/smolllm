@@ -107,6 +107,11 @@ class LLMResponse:
     # the result is the caller's job — smolllm runs no agentic loop.
     tool_calls: list[dict[str, object]] = field(default_factory=list)
 
+    @property
+    def actual_model(self) -> str:
+        """Best available identity of the model that produced this response."""
+        return self.resolved_model or self.model
+
     @override
     def __str__(self) -> str:
         return self.text
@@ -145,8 +150,8 @@ class StreamResponse:
     """Wrapper for streaming responses with model metadata.
 
     Yields ``StreamChunk`` objects during iteration.  After the stream
-    completes, accumulated ``reasoning`` is available on this object
-    (mirrors ``LLMResponse.reasoning``).
+    completes, accumulated ``reasoning`` and final model metadata are available
+    on this object (mirrors ``LLMResponse``).
     """
 
     stream: AsyncIterator[StreamChunk]
@@ -162,6 +167,11 @@ class StreamResponse:
     # Raw provider tool calls, assembled from streamed deltas and populated once the
     # stream is exhausted (partial argument JSON is never pushed to handlers).
     tool_calls: list[dict[str, object]] = field(default_factory=list)
+
+    @property
+    def actual_model(self) -> str:
+        """Best available model identity; final after the stream is exhausted."""
+        return self.resolved_model or self.model
 
     def __aiter__(self) -> AsyncIterator[StreamChunk]:
         return self

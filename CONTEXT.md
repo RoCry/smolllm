@@ -11,6 +11,9 @@ _Avoid_: vendor, backend.
 **Model spec**:
 The user-facing model string `provider/model[!effort]`, or a bare `model[!effort]` without `/`; comma-separated specs form a fallback chain and may mix both forms.
 
+**Actual model**:
+Best available identity of the model that produced a response: the server-reported model when present, otherwise the winning model spec. Exposed as `LLMResponse.actual_model`; this records the server's claim, not independent verification. Raw `model` and `resolved_model` remain available for routing and audit.
+
 **Bare model**:
 A model spec with no provider: base URL and API key must be passed explicitly (no env fallback); provider identity stays empty in responses, usage, and hook events.
 

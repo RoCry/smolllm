@@ -107,6 +107,7 @@ async def test_stream_llm_uses_final_usage_chunk(monkeypatch: pytest.MonkeyPatch
     resp = await stream_llm("hi", model=MODEL, api_key="k", base_url=BASE_URL)
     text = "".join([chunk.content async for chunk in resp])
     assert text == "hello"
+    assert resp.actual_model == "m1"
     assert resp.usage is not None
     assert resp.usage.estimated is False
     assert (resp.usage.input_tokens, resp.usage.output_tokens) == (12, 34)

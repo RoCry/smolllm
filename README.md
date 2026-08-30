@@ -21,10 +21,16 @@ async def main():
         model="gemini/gemini-2.0-flash"
     )
     print(response)
+    print(response.actual_model)
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
+
+`response.model` is the winning requested model spec. `response.resolved_model`
+is the optional model identity reported by the server. Use
+`response.actual_model` for the best available identity: reported when present,
+otherwise requested.
 
 ## Reasoning Effort
 

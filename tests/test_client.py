@@ -7,10 +7,16 @@ import httpx
 import pytest
 
 import smolllm.core as core
-from smolllm import LLMFunction, RequestEvent, ask_llm
+from smolllm import LLMFunction, LLMResponse, RequestEvent, ask_llm
 
 MODEL = "testprov/m1"
 BASE_URL = "http://test.local/v1"
+
+
+def test_actual_model_falls_back_to_winning_requested_model() -> None:
+    response = LLMResponse(text="answer", model="testprov/good", model_name="good")
+
+    assert response.actual_model == "testprov/good"
 
 
 @pytest.mark.asyncio
@@ -176,6 +182,7 @@ async def test_injected_client_preserves_stream_fallback_hooks_and_usage() -> No
     assert response.text == "answer"
     assert response.model == "testprov/good"
     assert response.resolved_model == "upstream/good"
+    assert response.actual_model == "upstream/good"
     assert response.finish_reason == "stop"
     assert response.usage is not None
     assert (response.usage.input_tokens, response.usage.output_tokens, response.usage.estimated) == (11, 7, False)
