@@ -27,6 +27,23 @@ def _sse(*chunks: dict[str, object]) -> bytes:
     return "".join(lines).encode()
 
 
+def _omlx_keepalive_body() -> bytes:
+    return _sse(
+        {
+            "id": "chatcmpl-test",
+            "object": "chat.completion.chunk",
+            "model": "keepalive",
+            "choices": [{"index": 0, "delta": {"content": ""}, "finish_reason": None}],
+        },
+        {
+            "id": "chatcmpl-test",
+            "object": "chat.completion.chunk",
+            "model": "Qwen3.8-27B-4bit",
+            "choices": [{"index": 0, "delta": {"content": "hello"}, "finish_reason": "stop"}],
+        },
+    )
+
+
 @pytest.mark.asyncio
 async def test_ask_llm_non_stream_uses_reported_usage(monkeypatch: pytest.MonkeyPatch) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
@@ -77,6 +94,17 @@ async def test_ask_llm_stream_without_usage_falls_back_to_estimate(monkeypatch: 
 
 
 @pytest.mark.asyncio
+async def test_ask_llm_ignores_omlx_keepalive_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    _install_transport(monkeypatch, lambda request: httpx.Response(200, content=_omlx_keepalive_body()))
+
+    resp = await ask_llm("hi", model=MODEL, api_key="k", base_url=BASE_URL)
+
+    assert resp.text == "hello"
+    assert resp.resolved_model == "Qwen3.8-27B-4bit"
+    assert resp.actual_model == "Qwen3.8-27B-4bit"
+
+
+@pytest.mark.asyncio
 async def test_ask_llm_retries_400_without_stream_options(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[bytes] = []
     body = _sse({"model": "m1", "choices": [{"delta": {"content": "hello"}, "finish_reason": "stop"}]})
@@ -111,6 +139,18 @@ async def test_stream_llm_uses_final_usage_chunk(monkeypatch: pytest.MonkeyPatch
     assert resp.usage is not None
     assert resp.usage.estimated is False
     assert (resp.usage.input_tokens, resp.usage.output_tokens) == (12, 34)
+
+
+@pytest.mark.asyncio
+async def test_stream_llm_ignores_omlx_keepalive_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    _install_transport(monkeypatch, lambda request: httpx.Response(200, content=_omlx_keepalive_body()))
+
+    resp = await stream_llm("hi", model=MODEL, api_key="k", base_url=BASE_URL)
+    text = "".join([chunk.content async for chunk in resp])
+
+    assert text == "hello"
+    assert resp.resolved_model == "Qwen3.8-27B-4bit"
+    assert resp.actual_model == "Qwen3.8-27B-4bit"
 
 
 @pytest.mark.asyncio

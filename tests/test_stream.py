@@ -82,6 +82,15 @@ def test_extract_model_from_chunk() -> None:
     assert extract_model(chunk) == "jake/kimi-2.6"
 
 
+def test_extract_model_ignores_omlx_keepalive_sentinel() -> None:
+    chunk = decode_sse_chunk(
+        'data: {"id":"chatcmpl-test","object":"chat.completion.chunk","created":0,'
+        '"model":"keepalive","choices":[{"index":0,"delta":{"content":""},"finish_reason":null}]}'
+    )
+    assert chunk is not None
+    assert extract_model(chunk) is None
+
+
 def test_extract_model_from_full_response() -> None:
     """extract_model also works on a non-streaming response body."""
     assert extract_model({"model": "gemini/gemini-flash", "choices": []}) == "gemini/gemini-flash"

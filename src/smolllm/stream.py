@@ -206,11 +206,12 @@ def extract_model(payload: object) -> str | None:
     """Read the upstream-reported model from a decoded chunk/response dict.
 
     Works for both streaming chunks and full responses (both carry a top-level
-    ``model``). Returns None when absent or not a non-empty string.
+    ``model``). Returns None when absent, not a non-empty string, or set to the
+    ``keepalive`` transport sentinel emitted by omlx.
     """
     if isinstance(payload, Mapping):
         model = payload.get("model")
-        if isinstance(model, str) and model:
+        if isinstance(model, str) and model and model != "keepalive":
             return model
     return None
 
