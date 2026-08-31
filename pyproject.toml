@@ -45,12 +45,15 @@ extend-select = ["I"]
 
 [dependency-groups]
 dev = [
-    "basedpyright>=1.39.10",
+    "ty>=0.0.73",
 ]
 
 [tool.ruff]
 # since we are using large display
 line-length = 120
 
-[tool.basedpyright]
+[tool.ty.environment]
+python-version = "3.13"
+
+[tool.ty.src]
 include = ["src"]

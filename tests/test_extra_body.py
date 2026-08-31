@@ -12,7 +12,7 @@ def _data(**kwargs: object) -> dict[str, object]:
         "test-model",
         "openai",
         "https://api.openai.com",
-        **kwargs,  # pyright: ignore[reportArgumentType]
+        **kwargs,
     )
     return data
 

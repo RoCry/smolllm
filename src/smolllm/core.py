@@ -252,7 +252,8 @@ async def ask_llm(
                 if prompt_tokens is not None or completion_tokens is not None:
                     provider_usage = (prompt_tokens, completion_tokens)
             else:
-                response = await http_client.post(
+                response = await http_client.request(
+                    "POST",
                     url,
                     json=data,
                     timeout=timeout,

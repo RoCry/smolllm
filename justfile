@@ -19,6 +19,10 @@ build: install-dev
 test:
     {{ UV_RUN }} pytest -s -v tests/*
 
+# Type-check the library.
+typecheck:
+    {{ UV_RUN }} ty check
+
 # Upload to and install from Test PyPI.
 test-release: build
     ./scripts/release.sh test

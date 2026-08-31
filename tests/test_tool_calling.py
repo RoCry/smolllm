@@ -191,7 +191,7 @@ def test_accumulator_is_empty_for_plain_text_stream() -> None:
 
 
 def _mock_client(handler: object) -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=httpx.MockTransport(handler))  # pyright: ignore[reportArgumentType]
+    return httpx.AsyncClient(transport=httpx.MockTransport(handler))
 
 
 @pytest.mark.asyncio
@@ -349,7 +349,7 @@ async def test_tool_role_messages_round_trip_to_the_provider(monkeypatch: pytest
     ]
 
     response = await ask_llm(
-        conversation,  # pyright: ignore[reportArgumentType]
+        conversation,
         model=MODEL,
         api_key="secret",
         base_url=BASE_URL,
