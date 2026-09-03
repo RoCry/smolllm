@@ -38,8 +38,11 @@ deepseek, groq and gemini; Rust against omlx, deepseek and gemini; the server th
 and `balance` aliases with the official `openai` Python SDK, whose own stream accumulator
 reassembles the single tool-call delta correctly. Two provider facts worth keeping: Gemini reports
 `finish_reason: "stop"` while returning tool calls (key on the calls, not the reason), and every
-`codeagentlayer/antigravity` leg silently drops `tools` and answers in prose — hence the
-tool-capable-only `agent` alias.
+`smolayer/antigravity` leg was believed to silently drop `tools` and answer in prose — hence the
+tool-capable-only `agent` alias. **Disproven 2026-09-03**: v1internal does honor tools, and
+two-step tool loops complete on `gemini-3-flash` and `claude-sonnet-4-6`. The old belief came from
+the Python client never having sent any. Replay needs `functionCall.id` plus `thoughtSignature`
+echoed back, which smolayer folds into the OpenAI tool-call id.
 
 **Design** (as shipped — response-side only; request side rides `extra_body={"tools": [...]}` — signatures stay untouched):
 - Accept `tool`-role messages and assistant messages carrying `tool_calls` (Go `Prompt.Validate()` currently rejects them; must be relaxed).
