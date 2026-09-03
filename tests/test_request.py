@@ -84,38 +84,31 @@ def test_prepare_request_data_rejects_empty_reasoning_effort() -> None:
         raise AssertionError("Expected ValueError for empty reasoning_effort")
 
 
-def test_prepare_request_data_rejects_unknown_reasoning_effort() -> None:
-    try:
-        prepare_request_data(
+def test_prepare_request_data_sends_an_effort_this_library_has_never_heard_of() -> None:
+    """Which levels exist is the endpoint's to say. A gateway fronting a subscription
+    offers `max` and `ultra`; refusing them here meant they never reached it."""
+    for effort in ("max", "ultra", "minimum"):
+        _, data = prepare_request_data(
             "hi",
             None,
             "test-model",
             "openai",
             "https://api.openai.com",
-            reasoning_effort="minimum",
+            reasoning_effort=effort,
         )
-    except ValueError as exc:
-        assert "reasoning_effort" in str(exc)
-        assert "openai" in str(exc)
-    else:
-        raise AssertionError("Expected ValueError for unsupported reasoning_effort")
+        assert data["reasoning_effort"] == effort
 
 
-def test_prepare_request_data_rejects_ollama_unsupported_reasoning_effort() -> None:
-    try:
-        prepare_request_data(
-            "hi",
-            None,
-            "test-model",
-            "ollama",
-            "http://localhost:11434",
-            reasoning_effort="minimal",
-        )
-    except ValueError as exc:
-        assert "reasoning_effort" in str(exc)
-        assert "ollama" in str(exc)
-    else:
-        raise AssertionError("Expected ValueError for Ollama-specific unsupported reasoning_effort")
+def test_prepare_request_data_sends_an_ollama_effort_unchanged() -> None:
+    _, data = prepare_request_data(
+        "hi",
+        None,
+        "test-model",
+        "ollama",
+        "http://localhost:11434",
+        reasoning_effort="minimal",
+    )
+    assert data["reasoning_effort"] == "minimal"
 
 
 def test_prepare_client_and_auth_http_uses_default_transport(monkeypatch) -> None:

@@ -9,9 +9,6 @@ import httpx
 
 from .types import Message, PromptType
 
-_OPENAI_REASONING_EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh")
-_OLLAMA_REASONING_EFFORTS = ("none", "low", "medium", "high")
-
 
 def _has_version_suffix(url: str) -> bool:
     """Check if URL already ends with a version path like /v1, /v2, etc."""
@@ -35,18 +32,21 @@ def _image_path_to_llm_data_str(image_path: str) -> str:
     return f"data:{mime_type};base64,{image_data}"
 
 
-def _normalize_reasoning_effort(reasoning_effort: str | None, *, provider_name: str) -> str | None:
+def _normalize_reasoning_effort(reasoning_effort: str | None) -> str | None:
+    """Tidy the value; do not judge it.
+
+    Which levels exist is the endpoint's to say, not this library's: behind a
+    `base_url` there may be a vendor, a local model or a gateway, and each has its
+    own ladder. A local allow-list here can only be wrong in two directions — it
+    refused levels real endpoints accept — and it refuses them before the request,
+    so the caller never sees the endpoint's own answer. An unknown level now comes
+    back as that endpoint's 400, naming the levels it really has.
+    """
     if reasoning_effort is None:
         return None
     normalized = reasoning_effort.strip().lower()
     if not normalized:
         raise ValueError("reasoning_effort must not be empty")
-    allowed = _OLLAMA_REASONING_EFFORTS if provider_name == "ollama" else _OPENAI_REASONING_EFFORTS
-    if normalized not in allowed:
-        expected = ", ".join(allowed)
-        raise ValueError(
-            f"Unsupported reasoning_effort={reasoning_effort!r} for provider={provider_name!r}; expected one of: {expected}"
-        )
     return normalized
 
 
@@ -187,7 +187,7 @@ def prepare_request_data(
             raise ValueError("stop entries must be non-empty strings")
         stop = stop_items
     image_path_list = list(image_paths) if image_paths else []
-    normalized_reasoning_effort = _normalize_reasoning_effort(reasoning_effort, provider_name=provider_name)
+    normalized_reasoning_effort = _normalize_reasoning_effort(reasoning_effort)
     url = _build_endpoint_url(base_url, provider_name, "chat/completions")
     data = _prepare_openai_request(
         prompt,
