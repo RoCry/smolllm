@@ -168,7 +168,7 @@ async def ask_llm(
         base_url: Custom base URL for API endpoint, fallback to ${PROVIDER}_BASE_URL (bare models: explicit only)
         handler: Optional callback for handling streaming responses
         remove_backticks: Whether to remove backticks from the response, e.g. ```markdown\nblabla\n``` -> blabla
-        image_paths: Optional list of image paths to include with the prompt
+        image_paths: Optional image paths or data: URLs, attached to the last user message (the prompt string or the last entry of a message list)
         stream: Whether to request a streaming response
         reasoning_effort: Optional reasoning effort passed through to the provider (e.g. "none", "medium", "xhigh")
         max_tokens: Optional maximum number of output tokens
@@ -368,7 +368,7 @@ async def stream_llm(
               Can be: str, list[str] (fallback order), set[str] (random), dict[str, weight] (weighted random)
         api_key: Optional API key, fallback to ${PROVIDER}_API_KEY (bare models: explicit only)
         base_url: Custom base URL for API endpoint, fallback to ${PROVIDER}_BASE_URL (bare models: explicit only)
-        image_paths: Optional list of image paths to include with the prompt
+        image_paths: Optional image paths or data: URLs, attached to the last user message (the prompt string or the last entry of a message list)
         reasoning_effort: Optional reasoning effort passed through to the provider (e.g. "none", "medium", "xhigh")
         max_tokens: Optional maximum number of output tokens
         stop: Optional stop sequence or stop sequence list

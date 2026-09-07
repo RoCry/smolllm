@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 
 import httpx
+import pytest
 
 from smolllm.request import prepare_client_and_auth, prepare_request_data
 
@@ -158,3 +159,56 @@ def test_url_gemini_with_version_suffix() -> None:
 def test_url_gemini_without_version_suffix() -> None:
     url, _ = prepare_request_data("hi", None, "m", "gemini", "https://generativelanguage.googleapis.com")
     assert url == "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+
+
+DATA_PNG = "data:image/png;base64,iVBORw0KGgo="
+
+
+def _messages(data: dict[str, object]) -> list[dict[str, object]]:
+    messages = data["messages"]
+    assert isinstance(messages, list)
+    return messages
+
+
+def test_images_attach_to_string_prompt() -> None:
+    _, data = prepare_request_data(
+        "what is this", None, "m", "openai", "https://api.openai.com", image_paths=[DATA_PNG]
+    )
+    messages = _messages(data)
+    assert len(messages) == 1
+    assert messages[0]["content"] == [
+        {"type": "text", "text": "what is this"},
+        {"type": "image_url", "image_url": {"url": DATA_PNG}},
+    ]
+
+
+def test_images_attach_to_last_user_message_of_list_prompt() -> None:
+    history = [
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": "hello"},
+        {"role": "user", "content": "and this?"},
+    ]
+    _, data = prepare_request_data(history, "sys", "m", "openai", "https://api.openai.com", image_paths=[DATA_PNG])
+    messages = _messages(data)
+    assert [m["role"] for m in messages] == ["system", "user", "assistant", "user"]
+    assert messages[1]["content"] == "hi"
+    assert messages[3]["content"] == [
+        {"type": "text", "text": "and this?"},
+        {"type": "image_url", "image_url": {"url": DATA_PNG}},
+    ]
+    assert history[2]["content"] == "and this?", "caller's message list must not be mutated"
+
+
+def test_images_extend_existing_content_parts() -> None:
+    prompt = [{"role": "user", "content": [{"type": "text", "text": "look"}]}]
+    _, data = prepare_request_data(prompt, None, "m", "openai", "https://api.openai.com", image_paths=[DATA_PNG])
+    assert _messages(data)[0]["content"] == [
+        {"type": "text", "text": "look"},
+        {"type": "image_url", "image_url": {"url": DATA_PNG}},
+    ]
+
+
+def test_images_require_trailing_user_message() -> None:
+    prompt = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}]
+    with pytest.raises(ValueError, match="last message to be a user message"):
+        prepare_request_data(prompt, None, "m", "openai", "https://api.openai.com", image_paths=[DATA_PNG])

@@ -46,6 +46,24 @@ response = await ask_llm(
 )
 ```
 
+## Images
+
+`image_paths` accepts file paths or `data:` URLs. Each image becomes an
+`image_url` part on the last user message: the prompt string, or the last
+entry of a message list. Files are base64-encoded with a mime type guessed
+from the extension.
+
+```python
+response = await ask_llm(
+    "What is in this picture?",
+    model="openai/gpt-4o",
+    image_paths=["photo.jpg", "data:image/png;base64,iVBORw0..."],
+)
+```
+
+With a message list the last message must be a user turn with content, or a
+`ValueError` is raised.
+
 ## Tool Calling
 
 Pass tools through the `extra_body` escape hatch; assembled tool calls come back on

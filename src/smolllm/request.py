@@ -32,6 +32,23 @@ def _image_path_to_llm_data_str(image_path: str) -> str:
     return f"data:{mime_type};base64,{image_data}"
 
 
+def _attach_images(messages: list[Message], image_paths: Sequence[str]) -> None:
+    """Append image parts to the last message, which must be a user turn with non-None content."""
+    if not messages or messages[-1]["role"] != "user":
+        raise ValueError("image_paths require the last message to be a user message")
+    last = messages[-1]
+    content = last["content"]
+    if isinstance(content, str):
+        parts: list[dict[str, object]] = [{"type": "text", "text": content}]
+    elif content is None:
+        raise ValueError("image_paths require the last user message to have content")
+    else:
+        parts = list(content)
+    for image_path in image_paths:
+        parts.append({"type": "image_url", "image_url": {"url": _image_path_to_llm_data_str(image_path)}})
+    messages[-1] = {**last, "content": parts}
+
+
 def _normalize_reasoning_effort(reasoning_effort: str | None) -> str | None:
     """Tidy the value; do not judge it.
 
@@ -86,25 +103,12 @@ def _prepare_openai_request(
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
 
-    if not isinstance(prompt, str):
-        if image_paths:
-            raise ValueError(
-                "Image paths are not supported with list prompt, you could put the images in the prompt instead"
-            )
-        messages.extend(prompt)
+    if isinstance(prompt, str):
+        messages.append({"role": "user", "content": prompt})
     else:
-        if image_paths:
-            content: list[dict[str, object]] = [{"type": "text", "text": prompt}]
-            for image_path in image_paths:
-                content.append(
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": _image_path_to_llm_data_str(image_path)},
-                    }
-                )
-            messages.append({"role": "user", "content": content})
-        else:
-            messages.append({"role": "user", "content": prompt})
+        messages.extend(prompt)
+    if image_paths:
+        _attach_images(messages, image_paths)
 
     payload: dict[str, object] = {
         "messages": messages,
