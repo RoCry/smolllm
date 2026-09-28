@@ -21,6 +21,10 @@ A model spec with no provider: base URL and API key must be passed explicitly (n
 Ordered or weighted candidate models; on failure the call advances to the next candidate.
 _Avoid_: confusing with retry.
 
+**Timeout**:
+One wall-clock deadline bounding the whole call — every fallback leg, retry and stream chunk (default 600 s, same as smolllm-go). Not a per-chunk read timeout: a keepalive trickle or a looping generation cannot outlive it, and an expired deadline ends the fallback chain with `TimeoutError`.
+_Avoid_: calling it a read/idle timeout.
+
 **Retry**:
 Re-attempt of the *same* model after a transient failure. Distinct from fallback (which switches models).
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 from collections.abc import Sequence
@@ -8,6 +9,7 @@ from time import perf_counter
 import httpx
 
 from .balancer import balancer
+from .deadline import DEFAULT_TIMEOUT_S, Deadline
 from .errors import evict_permanent_pair, render_exception
 from .http_stream import handle_http_error, iter_stream_lines, process_stream_response, usage_tokens_from_payload
 from .log import logger
@@ -137,6 +139,14 @@ def _is_truncated(finish_reason: str | None, *, has_content: bool, stream: bool)
     return stream and finish_reason is None
 
 
+def _check_deadline(deadline: Deadline, last_error: Exception | None) -> None:
+    """Before each fallback leg: an expired deadline ends the chain instead of starting another model."""
+    try:
+        deadline.remaining()
+    except TimeoutError as e:
+        raise e from last_error
+
+
 async def ask_llm(
     prompt: PromptType,
     *,
@@ -145,7 +155,7 @@ async def ask_llm(
     api_key: str | None = None,
     base_url: str | None = None,
     handler: StreamHandler | None = None,
-    timeout: float = 120.0,
+    timeout: float = DEFAULT_TIMEOUT_S,
     remove_backticks: bool = False,
     image_paths: Sequence[str] | None = None,
     stream: bool = True,
@@ -183,8 +193,10 @@ async def ask_llm(
         LLMResponse with the text, any tool calls the model requested, model used, and provider
     """
     selector = _create_selector(model)
+    deadline = Deadline(timeout)
     last_error: Exception | None = None
     while (m := selector.next_model()) is not None:
+        _check_deadline(deadline, last_error)
         # Pre-attempt placeholders for usage tracking on early failures
         attempt_provider = ""
         attempt_model_spec = m
@@ -236,7 +248,7 @@ async def ask_llm(
             if stream:
                 stream_usage: dict[str, int] = {}
                 outcome = await process_stream_response(
-                    iter_stream_lines(http_client, url, data, timeout, headers=request_headers),
+                    iter_stream_lines(http_client, url, data, deadline, headers=request_headers),
                     handler,
                     start_time,
                     usage=stream_usage,
@@ -252,16 +264,17 @@ async def ask_llm(
                 if prompt_tokens is not None or completion_tokens is not None:
                     provider_usage = (prompt_tokens, completion_tokens)
             else:
-                response = await http_client.request(
-                    "POST",
-                    url,
-                    json=data,
-                    timeout=timeout,
-                    headers=request_headers,
-                    auth=None,
-                )
-                await handle_http_error(response)
-                await response.aread()
+                async with asyncio.timeout(deadline.remaining()):
+                    response = await http_client.request(
+                        "POST",
+                        url,
+                        json=data,
+                        timeout=deadline.remaining(),
+                        headers=request_headers,
+                        auth=None,
+                    )
+                    await handle_http_error(response)
+                    await response.aread()
                 payload = response.json()
                 resp, reasoning = _extract_text_from_response(payload)
                 tool_calls = extract_tool_calls(payload)
@@ -349,7 +362,7 @@ async def stream_llm(
     model: ModelInput | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
-    timeout: float = 120.0,
+    timeout: float = DEFAULT_TIMEOUT_S,
     image_paths: Sequence[str] | None = None,
     reasoning_effort: str | None = None,
     temperature: float | None = None,
@@ -389,11 +402,14 @@ async def stream_llm(
     # value is unknown until then because the generator below runs lazily.
     response_ref: list[StreamResponse | None] = [None]
 
+    deadline = Deadline(timeout)
+
     async def _stream_with_fallback():
         nonlocal selector
         last_error: Exception | None = None
 
         while (m := selector.next_model()) is not None:
+            _check_deadline(deadline, last_error)
             accumulated_content: list[str] = []
             accumulated_reasoning: list[str] = []
             resolved_model: str | None = None
@@ -438,7 +454,7 @@ async def stream_llm(
 
                 try:
                     async with http_client:
-                        async for line in iter_stream_lines(http_client, url, data, timeout):
+                        async for line in iter_stream_lines(http_client, url, data, deadline):
                             raw = decode_sse_chunk(line)
                             if raw is None:
                                 continue

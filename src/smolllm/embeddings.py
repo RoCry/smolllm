@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import Sequence
 from time import perf_counter
 
 from .balancer import balancer
+from .deadline import DEFAULT_TIMEOUT_S, Deadline
 from .errors import evict_permanent_pair, render_exception
 from .http_stream import handle_http_error
 from .log import logger
@@ -50,13 +52,18 @@ async def embed_llm(
     api_key: str | None = None,
     base_url: str | None = None,
     dimensions: int | None = None,
-    timeout: float = 120.0,
+    timeout: float = DEFAULT_TIMEOUT_S,
     hook: Hook | None = None,
 ) -> EmbedResponse:
     """Generate embedding vectors via an OpenAI-compatible /embeddings endpoint."""
     selector = create_selector(model)
+    deadline = Deadline(timeout)
     last_error: Exception | None = None
     while (m := selector.next_model()) is not None:
+        try:
+            deadline.remaining()
+        except TimeoutError as e:
+            raise e from last_error
         attempt_provider = ""
         attempt_model_spec = m
         attempt_model_name = ""
@@ -91,8 +98,8 @@ async def embed_llm(
 
             input_tokens = estimate_tokens(str(data))
             start_time = perf_counter()
-            async with client:
-                response = await client.post(url, json=data, timeout=timeout)
+            async with client, asyncio.timeout(deadline.remaining()):
+                response = await client.post(url, json=data, timeout=deadline.remaining())
                 await handle_http_error(response)
                 await response.aread()
                 payload = response.json()

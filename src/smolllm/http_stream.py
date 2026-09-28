@@ -7,6 +7,7 @@ from typing import cast
 
 import httpx
 
+from .deadline import Deadline
 from .errors import brief_error_detail, extract_error_reason_codes, provider_http_status_error
 from .log import logger
 from .stream import (
@@ -68,21 +69,23 @@ async def iter_stream_lines(
     client: httpx.AsyncClient,
     url: str,
     data: dict[str, object],
-    timeout: float,
+    deadline: Deadline,
     *,
     headers: dict[str, str] | None = None,
 ) -> AsyncIterator[str]:
+    """Yield SSE lines; every line re-checks the whole-call deadline (keepalive trickles can't outlive it)."""
     try:
         async with client.stream(
             "POST",
             url,
             json=data,
-            timeout=timeout,
+            timeout=deadline.remaining(),
             headers=headers,
             auth=None,
         ) as response:
             await handle_http_error(response)
             async for line in response.aiter_lines():
+                deadline.remaining()
                 yield line
             return
     except httpx.HTTPStatusError as exc:
@@ -95,12 +98,13 @@ async def iter_stream_lines(
         "POST",
         url,
         json=retry_data,
-        timeout=timeout,
+        timeout=deadline.remaining(),
         headers=headers,
         auth=None,
     ) as response:
         await handle_http_error(response)
         async for line in response.aiter_lines():
+            deadline.remaining()
             yield line
 
 
