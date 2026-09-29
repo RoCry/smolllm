@@ -9,6 +9,7 @@ import pytest
 
 import smolllm.core as core
 from smolllm.core import ask_llm, stream_llm
+from smolllm.types import RequestEvent, StreamError
 
 MODEL = "testprov/m1"
 BASE_URL = "http://test.local/v1"
@@ -82,6 +83,67 @@ async def test_ask_llm_stream_uses_final_usage_chunk(monkeypatch: pytest.MonkeyP
     assert resp.usage is not None
     assert resp.usage.estimated is False
     assert (resp.usage.input_tokens, resp.usage.output_tokens) == (12, 34)
+
+
+@pytest.mark.asyncio
+async def test_truncated_stream_exposes_finish_reason_and_reported_usage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = _sse(
+        {"model": "resolved/model", "choices": [{"delta": {"content": "partial"}, "finish_reason": "length"}]},
+        {"choices": [], "usage": {"prompt_tokens": 12, "completion_tokens": 34}},
+    )
+    _install_transport(monkeypatch, lambda request: httpx.Response(200, content=body))
+    events: list[RequestEvent] = []
+
+    with pytest.raises(StreamError) as caught:
+        await ask_llm("hi", model=MODEL, api_key="k", base_url=BASE_URL, hook=events.append)
+
+    error = caught.value
+    assert error.finish_reason == "length"
+    assert error.resolved_model == "resolved/model"
+    assert error.actual_model == "resolved/model"
+    assert error.usage is not None
+    assert (error.usage.input_tokens, error.usage.output_tokens, error.usage.estimated) == (12, 34, False)
+    assert len(events) == 1
+    assert events[0].error is error
+    assert events[0].usage is error.usage
+
+
+@pytest.mark.asyncio
+async def test_truncated_non_stream_estimates_missing_usage(monkeypatch: pytest.MonkeyPatch) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "model": "resolved/model",
+                "choices": [{"message": {"content": "partial"}, "finish_reason": "length"}],
+            },
+        )
+
+    _install_transport(monkeypatch, handler)
+    with pytest.raises(StreamError) as caught:
+        await ask_llm("hi", model=MODEL, api_key="k", base_url=BASE_URL, stream=False)
+
+    assert caught.value.finish_reason == "length"
+    assert caught.value.usage is not None
+    assert caught.value.usage.output_tokens > 0
+    assert caught.value.usage.estimated is True
+
+
+@pytest.mark.asyncio
+async def test_stream_missing_terminal_reason_exposes_estimated_usage(monkeypatch: pytest.MonkeyPatch) -> None:
+    body = _sse({"model": "resolved/model", "choices": [{"delta": {"content": "partial"}}]})
+    _install_transport(monkeypatch, lambda request: httpx.Response(200, content=body))
+
+    with pytest.raises(StreamError) as caught:
+        await ask_llm("hi", model=MODEL, api_key="k", base_url=BASE_URL)
+
+    assert caught.value.finish_reason is None
+    assert caught.value.actual_model == "resolved/model"
+    assert caught.value.usage is not None
+    assert caught.value.usage.output_tokens > 0
+    assert caught.value.usage.estimated is True
 
 
 @pytest.mark.asyncio

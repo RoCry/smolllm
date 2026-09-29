@@ -21,10 +21,13 @@ ModelInput = str | Sequence[str] | set[str] | dict[str, float | int]
 
 
 class StreamError(RuntimeError):
-    """Raised when a streaming response fails mid-flight."""
+    """A response stream failed or ended incomplete; truncation keeps known metadata."""
 
     partial: str | None
     reason_codes: frozenset[str]
+    finish_reason: str | None
+    resolved_model: str | None
+    usage: Usage | None
 
     def __init__(
         self,
@@ -32,10 +35,21 @@ class StreamError(RuntimeError):
         *,
         partial: str | None = None,
         reason_codes: frozenset[str] | None = None,
+        finish_reason: str | None = None,
+        resolved_model: str | None = None,
+        usage: Usage | None = None,
     ) -> None:
         self.partial = partial
         self.reason_codes = reason_codes or frozenset()
+        self.finish_reason = finish_reason
+        self.resolved_model = resolved_model
+        self.usage = usage
         super().__init__(message)
+
+    @property
+    def actual_model(self) -> str | None:
+        """Server-reported model, else the winning requested model when known."""
+        return self.resolved_model or (self.usage.model if self.usage is not None else None)
 
 
 @dataclass(slots=True)

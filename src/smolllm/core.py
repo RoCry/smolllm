@@ -288,9 +288,8 @@ async def ask_llm(
 
             if not resp and not reasoning and not tool_calls:
                 raise ValueError(f"Received empty response from model {m}")
-            if _is_truncated(finish_reason, has_content=bool(resp or reasoning or tool_calls), stream=stream):
-                raise StreamError(f"Truncated response from model {m} (finish_reason={finish_reason})")
-            if remove_backticks:
+            truncated = _is_truncated(finish_reason, has_content=bool(resp or reasoning or tool_calls), stream=stream)
+            if remove_backticks and not truncated:
                 resp = strip_backticks(resp)
 
             total_time = perf_counter() - start_time
@@ -298,10 +297,6 @@ async def ask_llm(
                 provider_usage,
                 estimated_input_tokens=input_tokens,
                 response_text=resp + reasoning,
-            )
-
-            logger.info(
-                format_metrics(model_name, input_tokens, output_tokens, total_time, ttft_ms, estimated=estimated)
             )
 
             usage = Usage(
@@ -314,6 +309,16 @@ async def ask_llm(
                 duration_ms=int(total_time * 1000),
                 ttft_ms=ttft_ms,
                 estimated=estimated,
+            )
+            if truncated:
+                raise StreamError(
+                    f"Truncated response from model {m} (finish_reason={finish_reason})",
+                    finish_reason=finish_reason,
+                    resolved_model=resolved_model,
+                    usage=usage,
+                )
+            logger.info(
+                format_metrics(model_name, input_tokens, output_tokens, total_time, ttft_ms, estimated=estimated)
             )
             if hook is not None:
                 hook(RequestEvent(usage=usage, error=None, timestamp=time.time()))
@@ -334,17 +339,19 @@ async def ask_llm(
             _ = evict_permanent_pair(balancer, attempt_api_key, attempt_base_url, e)
             logger.warning(f"Failed to get response from model {m}: {render_exception(e)}")
             if hook is not None:
-                duration_ms = int((perf_counter() - start_time) * 1000)
-                fail_usage = Usage(
-                    provider=attempt_provider,
-                    model=attempt_model_spec,
-                    model_name=attempt_model_name,
-                    api_key_hint=preview_api_key(attempt_api_key) if attempt_api_key else "",
-                    input_tokens=input_tokens,
-                    output_tokens=0,
-                    duration_ms=duration_ms,
-                    ttft_ms=None,
-                )
+                fail_usage = e.usage if isinstance(e, StreamError) else None
+                if fail_usage is None:
+                    duration_ms = int((perf_counter() - start_time) * 1000)
+                    fail_usage = Usage(
+                        provider=attempt_provider,
+                        model=attempt_model_spec,
+                        model_name=attempt_model_name,
+                        api_key_hint=preview_api_key(attempt_api_key) if attempt_api_key else "",
+                        input_tokens=input_tokens,
+                        output_tokens=0,
+                        duration_ms=duration_ms,
+                        ttft_ms=None,
+                    )
                 hook(RequestEvent(usage=fail_usage, error=e, timestamp=time.time()))
             continue
         finally:
