@@ -27,7 +27,7 @@ from .types import StreamHandler as StreamHandler
 from .types import StreamResponse as StreamResponse
 from .types import Usage as Usage
 
-__version__ = "0.11.4"
+__version__ = "0.12.0"
 _LAZY_EXPORTS = {
     "ask_llm": ".core",
     "stream_llm": ".core",
