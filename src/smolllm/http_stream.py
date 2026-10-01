@@ -142,8 +142,10 @@ async def process_stream_response(
                 continue
             if usage is not None:
                 update_usage(raw, usage)
-            if resolved_model is None:
-                resolved_model = extract_model(raw)
+            # Last frame carrying a model wins: a relay's finish/usage frame names the
+            # leg that answered, while earlier frames may name a failed leg.
+            if (frame_model := extract_model(raw)) is not None:
+                resolved_model = frame_model
             if (reason := extract_finish_reason(raw)) is not None:
                 finish_reason = reason
             tool_calls.feed(raw)

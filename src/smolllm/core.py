@@ -466,8 +466,9 @@ async def stream_llm(
                             if raw is None:
                                 continue
                             update_usage(raw, stream_usage)
-                            if resolved_model is None:
-                                resolved_model = extract_model(raw)
+                            # Last frame carrying a model wins (see process_stream_response).
+                            if (frame_model := extract_model(raw)) is not None:
+                                resolved_model = frame_model
                             if (reason := extract_finish_reason(raw)) is not None:
                                 finish_reason = reason
                             tool_call_acc.feed(raw)

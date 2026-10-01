@@ -86,6 +86,28 @@ async def test_ask_llm_stream_uses_final_usage_chunk(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.asyncio
+async def test_stream_model_comes_from_last_frame_carrying_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A relay leg that only reasoned and failed names itself in the early frames;
+    # the finish frame and usage frame name the leg that answered.
+    body = _sse(
+        {"model": "failed/leg", "choices": [{"delta": {"reasoning_content": "hmm"}, "finish_reason": None}]},
+        {"model": "good/leg", "choices": [{"delta": {"content": "ok"}, "finish_reason": None}]},
+        {"model": "good/leg", "choices": [{"delta": {}, "finish_reason": "stop"}]},
+        {"model": "good/leg", "choices": [], "usage": {"prompt_tokens": 3, "completion_tokens": 1}},
+    )
+    _install_transport(monkeypatch, lambda request: httpx.Response(200, content=body))
+
+    asked = await ask_llm("hi", model=MODEL, api_key="k", base_url=BASE_URL)
+    streamed = await stream_llm("hi", model=MODEL, api_key="k", base_url=BASE_URL)
+    _ = [chunk async for chunk in streamed]
+
+    for response in (asked, streamed):
+        assert response.resolved_model == "good/leg"
+        assert response.usage is not None
+        assert (response.usage.input_tokens, response.usage.output_tokens, response.usage.estimated) == (3, 1, False)
+
+
+@pytest.mark.asyncio
 async def test_truncated_stream_exposes_finish_reason_and_reported_usage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

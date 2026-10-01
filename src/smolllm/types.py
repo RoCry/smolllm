@@ -109,7 +109,8 @@ class LLMResponse:
     model_name: str  # requested name, e.g. "gemini-2.0-flash"
     provider: str | None = None
     # Server-reported model actually used, e.g. "jake/kimi-2.6". Differs from `model`
-    # when a proxy resolves an alias/fallback chain. None if upstream omits it.
+    # when a proxy resolves an alias/fallback chain. Streams take it from the last frame
+    # carrying a model (the finish/usage frame names the answering leg). None if upstream omits it.
     resolved_model: str | None = None
     reasoning: str = ""
     usage: Usage | None = None
