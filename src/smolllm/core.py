@@ -35,6 +35,7 @@ from .types import (
     ModelInput,
     PromptType,
     RequestEvent,
+    StreamChunk,
     StreamError,
     StreamHandler,
     StreamResponse,
@@ -176,7 +177,9 @@ async def ask_llm(
               Can be: str, list[str] (fallback order), set[str] (random), dict[str, weight] (weighted random)
         api_key: Optional API key, fallback to ${PROVIDER}_API_KEY (bare models: explicit only)
         base_url: Custom base URL for API endpoint, fallback to ${PROVIDER}_BASE_URL (bare models: explicit only)
-        handler: Optional callback for handling streaming responses
+        handler: Optional callback for handling streaming responses. Once it has received answer
+              content, a failure is raised instead of falling back to the next model, so it never
+              sees two models' answers spliced together; reasoning-only output does not commit.
         remove_backticks: Whether to remove backticks from the response, e.g. ```markdown\nblabla\n``` -> blabla
         image_paths: Optional image paths or data: URLs, attached to the last user message (the prompt string or the last entry of a message list)
         stream: Whether to request a streaming response
@@ -195,6 +198,15 @@ async def ask_llm(
     selector = _create_selector(model)
     deadline = Deadline(timeout)
     last_error: Exception | None = None
+    # Answer content reached the caller's handler: the call is committed to this model.
+    delivered = False
+
+    async def deliver(chunk: StreamChunk) -> None:
+        nonlocal delivered
+        assert handler is not None
+        delivered = delivered or bool(chunk.content)
+        await handler(chunk)
+
     while (m := selector.next_model()) is not None:
         _check_deadline(deadline, last_error)
         # Pre-attempt placeholders for usage tracking on early failures
@@ -249,7 +261,7 @@ async def ask_llm(
                 stream_usage: dict[str, int] = {}
                 outcome = await process_stream_response(
                     iter_stream_lines(http_client, url, data, deadline, headers=request_headers),
-                    handler,
+                    deliver if handler is not None else None,
                     start_time,
                     usage=stream_usage,
                 )
@@ -282,9 +294,7 @@ async def ask_llm(
                 finish_reason = extract_finish_reason(payload) if isinstance(payload, dict) else None
                 provider_usage = usage_tokens_from_payload(payload)
                 if handler is not None:
-                    from .types import StreamChunk
-
-                    await handler(StreamChunk(content=resp, reasoning=reasoning))
+                    await deliver(StreamChunk(content=resp, reasoning=reasoning))
 
             if not resp and not reasoning and not tool_calls:
                 raise ValueError(f"Received empty response from model {m}")
@@ -353,6 +363,9 @@ async def ask_llm(
                         ttft_ms=None,
                     )
                 hook(RequestEvent(usage=fail_usage, error=e, timestamp=time.time()))
+            if delivered:
+                logger.warning(f"Not falling back from model {m}: its answer already reached the handler")
+                raise
             continue
         finally:
             if owned_client is not None:
@@ -400,8 +413,10 @@ async def stream_llm(
         calls the model requested are on ``.tool_calls`` once the stream is exhausted
 
     Note:
-        If streaming fails mid-way, retries with fallback models. Already-yielded
-        chunks cannot be retracted; callers should handle partial output.
+        Answer content commits the stream to its model: once a content chunk has been
+        yielded, a failure raises ``StreamError`` with ``partial`` set and never falls
+        back. A model that failed after yielding only reasoning (or nothing) is followed
+        by the next fallback model; its reasoning chunks stay yielded.
     """
     selector = _create_selector(model)
 
