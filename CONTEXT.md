@@ -23,6 +23,7 @@ _Avoid_: confusing with retry.
 
 **Timeout**:
 One wall-clock deadline bounding the whole call — every fallback leg, retry and stream chunk (default 600 s, same as smolllm-go). Not a per-chunk read timeout: a keepalive trickle or a looping generation cannot outlive it, and an expired deadline ends the fallback chain with `TimeoutError`.
+Client-side only: never sent on the wire (providers reject unknown fields). smolllm-server imposes no deadline of its own, so this one alone governs a call through it.
 _Avoid_: calling it a read/idle timeout.
 
 **Retry**:
