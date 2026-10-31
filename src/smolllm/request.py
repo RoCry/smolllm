@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import ipaddress
 import mimetypes
 import re
 from collections.abc import Sequence
@@ -264,4 +265,26 @@ def prepare_client_and_auth(
     # Let httpx pick the correct local address family. Forcing an IPv4 bind
     # breaks reachable HTTP endpoints on some networks, including `.local`
     # hosts discovered over mDNS.
-    return httpx.AsyncClient(headers=prepare_auth_headers(api_key), verify=not unsecure)
+    return httpx.AsyncClient(
+        headers=prepare_auth_headers(api_key),
+        verify=not unsecure,
+        trust_env=not is_local_host(httpx.URL(url).host),
+    )
+
+
+def is_local_host(host: str) -> bool:
+    """A host no proxy should ever carry: loopback, private ranges, mDNS ``.local``.
+
+    httpx reads the macOS system proxy but not its exception list, and it turns
+    ``NO_PROXY=*.local`` into a pattern that matches nothing. So a LAN server
+    was reached through Surge, which reported its "connection refused" as an
+    HTML 503 page (2026-10-31): the real cause never reached the caller.
+    """
+    host = host.lower().rstrip(".")
+    if host == "localhost" or host.endswith((".local", ".localhost")):
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return address.is_loopback or address.is_private or address.is_link_local

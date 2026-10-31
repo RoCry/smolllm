@@ -48,7 +48,14 @@ def redact_credentials(text: str) -> str:
     return text
 
 
+_HTML_TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
+
+
 def brief_error_detail(text: str) -> str:
+    if text.lstrip()[:15].lower().startswith(("<!doctype html", "<html")):
+        # A proxy's or gateway's error page: its title is the message, the rest is CSS.
+        title = _HTML_TITLE.search(text)
+        text = f"HTML page: {title.group(1) if title else 'untitled'}"
     detail = " ".join(redact_credentials(text).split())
     if not detail:
         return "no detail"
