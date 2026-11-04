@@ -8,3 +8,4 @@ Decision: scope is frozen at chat + embeddings; no new modalities, no native pro
 
 - Tool calling, `extra_body` escape hatch, JSON mode: designs agreed, implementation deferred (see docs/DEFERRED.md).
 - Rejected outright (don't re-propose): modality expansion (image gen/ASR/rerank/classify), native provider transports, prompt-based tool emulation, automatic JSON repair, embedded pricing catalogs.
+- A provider or parameter combination reachable only over a non-OpenAI-compat wire (e.g. OpenAI `/v1/responses` for gpt-6.x tools + `reasoning_effort`) is fronted by the smolayer gateway, which translates to the OpenAI-compat wire; clients never translate (smolllm-go#13 → smolayer#26).
