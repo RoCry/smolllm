@@ -125,7 +125,9 @@ def is_permanent_key_error(exc: Exception) -> bool:
     current: BaseException | None = exc
     while current is not None and id(current) not in seen:
         seen.add(id(current))
-        if isinstance(current, httpx.HTTPStatusError):
+        # A 5xx is the endpoint's own failure: a relay's 502 quotes the reason its upstream leg gave
+        # for the relay's key there, which says nothing about the key this caller sent.
+        if isinstance(current, httpx.HTTPStatusError) and current.response.status_code < 500:
             reason_codes: object = current.__dict__.get(_PROVIDER_REASON_CODES_ATTR)
             if isinstance(reason_codes, frozenset) and reason_codes & _PERMANENT_KEY_REASONS:
                 return True

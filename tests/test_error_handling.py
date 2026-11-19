@@ -109,6 +109,39 @@ async def test_suspended_key_is_redacted_evicted_and_logged_once(
 
 
 @pytest.mark.asyncio
+async def test_relay_502_quoting_an_upstream_suspension_keeps_the_relay_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Captured 2026-11-18: a relay's 502 carried its Gemini leg's CONSUMER_SUSPENDED and the valid relay key was evicted."""
+    test_balancer = SimpleBalancer()
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            502,
+            json={
+                "error": {
+                    "type": "api_error",
+                    "message": "gemini: 403 Permission denied: Consumer has been suspended (CONSUMER_SUSPENDED)",
+                }
+            },
+        )
+
+    def prepare_client(_url: str, api_key: str) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            headers={"authorization": f"Bearer {api_key}"},
+            transport=httpx.MockTransport(handler),
+        )
+
+    monkeypatch.setattr(core, "balancer", test_balancer)
+    monkeypatch.setattr(core, "prepare_client_and_auth", prepare_client)
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await ask_llm("question", model=MODEL, api_key="relay-key", base_url=BASE_URL, stream=False)
+
+    assert test_balancer.evict_pair("relay-key", BASE_URL) is True
+
+
+@pytest.mark.asyncio
 async def test_empty_transport_error_has_class_status_and_detail(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
