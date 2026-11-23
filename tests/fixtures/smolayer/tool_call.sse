@@ -1,0 +1,16 @@
+data: {"choices":[{"delta":{"role":"assistant","tool_calls":[{"function":{"arguments":"","name":"get_weather"},"id":"call_56ccb2e28a724aeb89f24d83ee75cf22","index":0,"type":"function"}]},"finish_reason":null,"index":0}],"created":1795396324,"id":"chatcmpl-22783b1174cc44abb7597200e5ba9a75","model":"codex/gpt-6.1-terra","object":"chat.completion.chunk","service_tier":"default"}
+
+data: {"choices":[{"delta":{"tool_calls":[{"function":{"arguments":"{\""},"index":0}]},"finish_reason":null,"index":0}],"created":1795396324,"id":"chatcmpl-22783b1174cc44abb7597200e5ba9a75","model":"codex/gpt-6.1-terra","object":"chat.completion.chunk","service_tier":"default"}
+
+data: {"choices":[{"delta":{"tool_calls":[{"function":{"arguments":"city"},"index":0}]},"finish_reason":null,"index":0}],"created":1795396324,"id":"chatcmpl-22783b1174cc44abb7597200e5ba9a75","model":"codex/gpt-6.1-terra","object":"chat.completion.chunk","service_tier":"default"}
+
+data: {"choices":[{"delta":{"tool_calls":[{"function":{"arguments":"\":\""},"index":0}]},"finish_reason":null,"index":0}],"created":1795396324,"id":"chatcmpl-22783b1174cc44abb7597200e5ba9a75","model":"codex/gpt-6.1-terra","object":"chat.completion.chunk","service_tier":"default"}
+
+data: {"choices":[{"delta":{"tool_calls":[{"function":{"arguments":"Paris"},"index":0}]},"finish_reason":null,"index":0}],"created":1795396324,"id":"chatcmpl-22783b1174cc44abb7597200e5ba9a75","model":"codex/gpt-6.1-terra","object":"chat.completion.chunk","service_tier":"default"}
+
+data: {"choices":[{"delta":{"tool_calls":[{"function":{"arguments":"\"}"},"index":0}]},"finish_reason":null,"index":0}],"created":1795396324,"id":"chatcmpl-22783b1174cc44abb7597200e5ba9a75","model":"codex/gpt-6.1-terra","object":"chat.completion.chunk","service_tier":"default"}
+
+data: {"choices":[{"delta":{},"finish_reason":"tool_calls","index":0}],"created":1795396324,"id":"chatcmpl-22783b1174cc44abb7597200e5ba9a75","model":"codex/gpt-6.1-terra","object":"chat.completion.chunk","service_tier":"default","usage":{"completion_tokens":18,"completion_tokens_details":{"reasoning_tokens":0},"prompt_tokens":63,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":81}}
+
+data: [DONE]
+

@@ -70,6 +70,10 @@ Pass tools through the `extra_body` escape hatch; assembled tool calls come back
 the response. smolllm never executes a tool — you run the loop and replay the results
 as `assistant` + `tool` messages. See [examples/tool_calling.py](examples/tool_calling.py).
 
+Behind smolayer, reasoning models also return opaque `response.reasoning_items`; put them back
+unchanged on the replayed assistant message (`"reasoning_items": response.reasoning_items`) so the
+provider does not re-reason on the next step.
+
 ```python
 response = await ask_llm(messages, extra_body={"tools": TOOLS})
 for call in response.tool_calls:

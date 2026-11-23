@@ -16,6 +16,7 @@ from .stream import (
     extract_delta,
     extract_finish_reason,
     extract_model,
+    extract_reasoning_items,
     update_usage,
 )
 from .types import StreamHandler
@@ -118,6 +119,7 @@ class StreamOutcome:
     resolved_model: str | None
     finish_reason: str | None
     tool_calls: list[dict[str, object]] = field(default_factory=list)
+    reasoning_items: list[str] = field(default_factory=list)
 
 
 async def process_stream_response(
@@ -135,6 +137,7 @@ async def process_stream_response(
     finish_reason: str | None = None
     think_filter = ThinkTagFilter()
     tool_calls = ToolCallAccumulator()
+    reasoning_items: list[str] = []
     with ResponseDisplay(stream_handler) as display:
         async for line in lines:
             raw = decode_sse_chunk(line)
@@ -149,6 +152,7 @@ async def process_stream_response(
             if (reason := extract_finish_reason(raw)) is not None:
                 finish_reason = reason
             tool_calls.feed(raw)
+            reasoning_items.extend(extract_reasoning_items(raw))
             if chunk := extract_delta(raw):
                 chunk = think_filter.feed(chunk)
                 if chunk:
@@ -171,4 +175,5 @@ async def process_stream_response(
         resolved_model=resolved_model,
         finish_reason=finish_reason,
         tool_calls=assembled_calls,
+        reasoning_items=reasoning_items,
     )

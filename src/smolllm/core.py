@@ -27,6 +27,7 @@ from .stream import (
     extract_delta,
     extract_finish_reason,
     extract_model,
+    extract_reasoning_items,
     update_usage,
 )
 from .types import (
@@ -255,6 +256,7 @@ async def ask_llm(
             resolved_model: str | None = None
             finish_reason: str | None = None
             tool_calls: list[dict[str, object]] = []
+            reasoning_items: list[str] = []
             provider_usage: tuple[int | None, int | None] | None = None
             request_headers = prepare_auth_headers(used_api_key) if client is not None else None
             if stream:
@@ -271,6 +273,7 @@ async def ask_llm(
                 resolved_model = outcome.resolved_model
                 finish_reason = outcome.finish_reason
                 tool_calls = outcome.tool_calls
+                reasoning_items = outcome.reasoning_items
                 prompt_tokens = stream_usage.get("prompt_tokens")
                 completion_tokens = stream_usage.get("completion_tokens")
                 if prompt_tokens is not None or completion_tokens is not None:
@@ -290,6 +293,7 @@ async def ask_llm(
                 payload = response.json()
                 resp, reasoning = _extract_text_from_response(payload)
                 tool_calls = extract_tool_calls(payload)
+                reasoning_items = extract_reasoning_items(payload) if isinstance(payload, dict) else []
                 resolved_model = extract_model(payload)
                 finish_reason = extract_finish_reason(payload) if isinstance(payload, dict) else None
                 provider_usage = usage_tokens_from_payload(payload)
@@ -343,6 +347,7 @@ async def ask_llm(
                 usage=usage,
                 finish_reason=finish_reason,
                 tool_calls=tool_calls,
+                reasoning_items=reasoning_items,
             )
         except Exception as e:
             last_error = e
@@ -473,6 +478,7 @@ async def stream_llm(
                 think_filter = ThinkTagFilter()
                 stream_usage: dict[str, int] = {}
                 tool_call_acc = ToolCallAccumulator()
+                reasoning_items: list[str] = []
 
                 try:
                     async with http_client:
@@ -487,6 +493,7 @@ async def stream_llm(
                             if (reason := extract_finish_reason(raw)) is not None:
                                 finish_reason = reason
                             tool_call_acc.feed(raw)
+                            reasoning_items.extend(extract_reasoning_items(raw))
                             if chunk := extract_delta(raw):
                                 chunk = think_filter.feed(chunk)
                                 if chunk:
@@ -557,6 +564,7 @@ async def stream_llm(
                     sr.usage = usage
                     sr.finish_reason = finish_reason
                     sr.tool_calls = tool_calls
+                    sr.reasoning_items = reasoning_items
                 if hook is not None:
                     hook(RequestEvent(usage=usage, error=None, timestamp=time.time()))
                 return  # Stream completed successfully

@@ -1,0 +1,6 @@
+data: {"choices":[{"delta":{"content":"pong","role":"assistant"},"finish_reason":null,"index":0}],"created":1795396322,"id":"chatcmpl-5c2def3293fe48c8852a228b6ac7a6bd","model":"codex/gpt-6.1-terra","object":"chat.completion.chunk","service_tier":"default"}
+
+data: {"choices":[{"delta":{},"finish_reason":"stop","index":0}],"created":1795396322,"id":"chatcmpl-5c2def3293fe48c8852a228b6ac7a6bd","model":"codex/gpt-6.1-terra","object":"chat.completion.chunk","service_tier":"default","usage":{"completion_tokens":5,"completion_tokens_details":{"reasoning_tokens":0},"prompt_tokens":21,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":26}}
+
+data: [DONE]
+

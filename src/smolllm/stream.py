@@ -60,6 +60,29 @@ def extract_tool_call_deltas(chunk: Mapping[str, object]) -> list[Mapping[str, o
     return [cast(Mapping[str, object], call) for call in calls if isinstance(call, Mapping)]
 
 
+def extract_reasoning_items(payload: Mapping[str, object]) -> list[str]:
+    """Pull gateway reasoning items out of a chunk's ``delta`` or a response's ``message``.
+
+    smolayer mints one opaque ``rsn_`` token per provider reasoning step: streamed as
+    ``delta.reasoning_items`` arrays, whole as ``message.reasoning_items``. Returned verbatim.
+    """
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], Mapping):
+        return []
+    choice = cast(Mapping[str, object], choices[0])
+    for container_key in ("delta", "message"):
+        container = choice.get(container_key)
+        if not isinstance(container, Mapping):
+            continue
+        items = cast(Mapping[str, object], container).get("reasoning_items")
+        if items is None:
+            continue
+        if not isinstance(items, list) or not all(isinstance(item, str) for item in items):
+            raise TypeError("reasoning_items must be a list of strings")
+        return cast(list[str], list(items))
+    return []
+
+
 @dataclass(slots=True)
 class ToolCallAccumulator:
     """Reassembles streamed tool-call deltas into whole calls.

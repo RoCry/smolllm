@@ -121,6 +121,10 @@ class LLMResponse:
     # Empty unless the model answered with tool calls; executing them and replaying
     # the result is the caller's job — smolllm runs no agentic loop.
     tool_calls: list[dict[str, object]] = field(default_factory=list)
+    # Opaque gateway tokens (smolayer `rsn_...`) for the provider reasoning behind this turn,
+    # verbatim and in arrival order. Echo them on the replayed assistant message as
+    # `reasoning_items` so the provider need not re-reason; smolllm never reads them.
+    reasoning_items: list[str] = field(default_factory=list)
 
     @property
     def actual_model(self) -> str:
@@ -182,6 +186,10 @@ class StreamResponse:
     # Raw provider tool calls, assembled from streamed deltas and populated once the
     # stream is exhausted (partial argument JSON is never pushed to handlers).
     tool_calls: list[dict[str, object]] = field(default_factory=list)
+    # Opaque gateway tokens (smolayer `rsn_...`) for the provider reasoning behind this turn,
+    # verbatim and in arrival order. Echo them on the replayed assistant message as
+    # `reasoning_items` so the provider need not re-reason; smolllm never reads them.
+    reasoning_items: list[str] = field(default_factory=list)
 
     @property
     def actual_model(self) -> str:
@@ -254,12 +262,15 @@ class Message(TypedDict):
     ``content`` is None on an assistant turn that only requests tool calls.
     ``tool_calls`` (assistant) and ``tool_call_id`` (tool result) are present
     only on those turns, so a caller-run tool loop replays losslessly.
+    ``reasoning_items`` (assistant) are the opaque tokens a gateway returned on that turn,
+    sent back unchanged.
     """
 
     role: MessageRole
     content: str | Sequence[dict[str, object]] | None
     tool_calls: NotRequired[Sequence[dict[str, object]]]
     tool_call_id: NotRequired[str]
+    reasoning_items: NotRequired[Sequence[str]]
     name: NotRequired[str]
 
 

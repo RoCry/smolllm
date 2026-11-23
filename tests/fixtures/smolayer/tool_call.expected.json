@@ -1,0 +1,19 @@
+{
+  "content": "",
+  "reasoning": "",
+  "tool_calls": [
+    {
+      "id": "call_56ccb2e28a724aeb89f24d83ee75cf22",
+      "name": "get_weather",
+      "arguments": "{\"city\":\"Paris\"}"
+    }
+  ],
+  "reasoning_items": [],
+  "finish_reason": "tool_calls",
+  "usage": {
+    "prompt_tokens": 63,
+    "completion_tokens": 18,
+    "cached_tokens": 0,
+    "reasoning_tokens": 0
+  }
+}

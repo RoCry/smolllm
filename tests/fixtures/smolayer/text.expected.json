@@ -1,0 +1,13 @@
+{
+  "content": "pong",
+  "reasoning": "",
+  "tool_calls": [],
+  "reasoning_items": [],
+  "finish_reason": "stop",
+  "usage": {
+    "prompt_tokens": 21,
+    "completion_tokens": 5,
+    "cached_tokens": 0,
+    "reasoning_tokens": 0
+  }
+}

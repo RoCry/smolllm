@@ -56,3 +56,7 @@ _Avoid_: raw options, extra params.
 **Tool call**:
 A provider-issued request to run a named function, surfaced verbatim as a dict. The caller executes it and replays the assistant and `tool` messages; the library runs no agentic loop and never inspects or repairs the argument JSON.
 _Avoid_: function call, tool use, implying smolllm executes anything.
+
+**Reasoning item**:
+An opaque token a gateway (smolayer `rsn_...`) mints for one step of a provider's reasoning, streamed as `delta.reasoning_items` (or whole as `message.reasoning_items`) and collected verbatim, in arrival order, on `LLMResponse.reasoning_items` / `StreamResponse.reasoning_items` (final once the stream is exhausted), winning fallback leg only. The caller echoes them back as `reasoning_items` on the replayed assistant message so the provider need not re-reason; the library never reads them.
+_Avoid_: encrypted content, thinking block, confusing with **Reasoning** (display text).
